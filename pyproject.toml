@@ -1,0 +1,487 @@
+[build-system]
+requires = ["hatchling==1.29.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "issue_preprocessor"
+version = "1.0.0"
+description = "AI preprocess issue"
+readme = "README.md"
+license = { file = "LICENSE" }
+keywords = ["claude", "claude-code", "codex", "opencode", "cursor", "gemini", "aider", "kiro", "knowledge-graph", "rag", "graphrag", "obsidian", "community-detection", "tree-sitter", "leiden", "llm"]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "mypy~=1.20.1",
+    "mypy_extensions",
+    "fastapi>=0.104.1",
+    "uvicorn>=0.24.0",
+    "neo4j>=6.1.0",
+    "ladybug>=0.16.1",
+    "prompt_toolkit>=3.0.52",
+    "rich>=15.0.0",
+    "snowflake>=1.12.0",
+    "python-jose>=3.3.0",
+    "python-multipart>=0.0.6",
+    "langchain>=0.3.0",
+    "langchain-community>=0.0.10",
+    "langchain-openai>=0.3.3",
+    "langchain-chroma>=0.0.5",
+    "chromadb>=0.6.3",
+    "langchain-qdrant>=0.2.0",
+    "chroma-hnswlib>=0.7.3",
+    "BCrypt==4.0.1",
+    "SQLAlchemy>=2.0.23",
+    "alembic>=1.12.1",
+    "mysql-connector-python==9.5.0",
+    "boto3",
+    "click>=8.1.0",
+    "minio>=7.2.0",
+    "python-docx>=0.8.11",
+    "pypdf>=3.0.0",
+    "unstructured>=0.10.30",
+    "markdown>=3.0.0",
+    "unstructured[md]>=0.10.0",
+    "openai>=1.30.0",
+    "email-validator",
+    "dashscope>=1.13.6",
+    "langchain-deepseek==0.1.1",
+    "langchain-ollama==0.2.3",
+    "langchain-huggingface>=0.1.0",
+    "sentence-transformers>=2.2.0",
+    "docx2txt==0.8",
+    "networkx",
+    "tree-sitter>=0.23.0",
+    "tree-sitter-python",
+    "tree-sitter-javascript",
+    "tree-sitter-typescript",
+    "tree-sitter-go",
+    "tree-sitter-rust",
+    "tree-sitter-java",
+    "tree-sitter-c",
+    "tree-sitter-cpp",
+    "tree-sitter-ruby",
+    "tree-sitter-c-sharp",
+    "tree-sitter-kotlin",
+    "tree-sitter-scala",
+    "tree-sitter-php",
+    "tree-sitter-swift",
+    "tree-sitter-lua",
+    "tree-sitter-zig",
+    "tree-sitter-powershell",
+    "tree-sitter-elixir",
+    "tree-sitter-objc",
+    "tree-sitter-julia",
+    "tree-sitter-verilog",
+    "tree-sitter-androidlog",
+    "tree-sitter-kernellog",
+]
+
+[project.scripts]
+preprocessor = "preprocessor.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/anlijiu/issue_preprocessor"
+Repository = "https://github.com/anlijiu/issue_preprocessor"
+Issues = "https://github.com/anlijiu/issue_preprocessor"
+
+[project.optional-dependencies]
+mcp = ["mcp"]
+neo4j = ["neo4j"]
+pdf = ["pypdf", "html2text"]
+watch = ["watchdog"]
+svg = ["matplotlib"]
+leiden = ["graspologic; python_version < '3.13'"]
+office = ["python-docx", "openpyxl"]
+video = ["faster-whisper", "yt-dlp"]
+all = ["mcp", "neo4j", "pypdf", "html2text", "watchdog", "graspologic; python_version < '3.13'", "python-docx", "openpyxl", "faster-whisper", "yt-dlp", "matplotlib"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["issue*"]
+
+[tool.setuptools.package-data]
+issue_preprocessor = ["skill.md", "skill-codex.md", "skill-opencode.md", "skill-aider.md", "skill-copilot.md", "skill-claw.md", "skill-windows.md", "skill-droid.md", "skill-trae.md", "skill-kiro.md", "skill-vscode.md"]
+
+[dependency-groups]
+coverage = [
+  "coverage[toml]>=7.10",
+]
+dev = [
+  { include-group = "testing" },
+  { include-group = "typing" },
+]
+pre-commit = [
+  "prek~=0.3",
+]
+testing = [
+  { include-group = "coverage" },
+  "colorama>=0.4.4,<0.5",
+  "faker>=37.4.2",
+  "moto>=5.0.21,<6",
+  "pytest>=9",
+  "pytest-asyncio>=1.3",
+  "pytest-codspeed>=4.2.0",
+  "pytest-docker~=3.1",
+  "pytest-github-actions-annotate-failures>=0.4.0",
+  "pytest-order~=1.3",
+  "pytest-randomly>=3.16,<5.0",
+  "pytest-structlog~=1.1",
+  "pytest-timeout>=2.4.0",
+  "pytest-xdist~=3.6",
+  "requests-mock>=1.12.1,<2",
+  "setproctitle~=1.3", # Used by pytest-xdist to aid with handling resource intensive processes.
+  "time-machine>=3",
+]
+typing = [
+  { include-group = "testing" },
+  "backports-strenum",  # TODO: Drop once the runtime dependency is dropped
+  "boto3-stubs[essential]>=1.35",
+  "importlib-metadata",  # TODO: Drop once the runtime dependency is dropped
+  "mypy~=1.20.0",
+  "ty==0.0.31",
+  "types-dateparser>=1.2.0.20250208",
+  "types-jsonschema>=4.23.0.20240813,<5",
+  "types-psutil>=7.0.0.20250218,<8",
+  "types-pyyaml>=6.0.12.20240917,<7",
+  "types-requests>=2.31.0,<3",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src",
+  "tests",
+]
+
+[tool.hatch.build.targets.wheel]
+include = ["src/preprocessor", "src/understand_anything"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/preprocessor" = "preprocessor"
+"src/understand_anything" = "understand_anything"
+
+[tool.pytest]
+addopts = [
+  "--doctest-modules",
+  "-ra",
+]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "class"
+filterwarnings = [
+  'error',
+  # First-party warnings
+  '''once:The 'version' field in preprocessor.yml is deprecated.*:DeprecationWarning''',
+  'once::preprocessor.core._compat.MeltanoInternalDeprecationWarning',
+  # Third-party warnings
+  'once::pytest.PytestUnraisableExceptionWarning',
+  'once::pytest.PytestUnhandledThreadExceptionWarning',
+  'once::ResourceWarning',
+  'once:You are using a Python version .* which Google will stop supporting in new releases of google.api_core once it reaches its end of life:FutureWarning',
+]
+log_cli = true
+log_cli_format = "%(message)s"
+log_cli_level = "CRITICAL"
+log_file = "pytest.log"
+log_file_date_format = "%Y-%m-%d %H:%M:%S"
+log_file_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_file_level = "DEBUG"
+log_level = "INFO"
+markers = [
+  "backend(type): backend specific test",
+  "meta: meta test",
+  "concurrent: test requires true concurrency",
+  "slow: slow test",
+]
+minversion = "9"
+strict = true
+testpaths = [
+  "tests/",
+]
+
+[tool.coverage.run]
+branch = true
+core = "sysmon"
+concurrency = [
+  "multiprocessing",
+  "thread",
+]
+disable_warnings = [
+  "no-sysmon",
+]
+parallel = true
+patch = [
+  "subprocess",
+]
+relative_files = true  # This allows coverage to be measured in Windows
+sigterm = true
+source = [
+  "preprocessor",
+  "tests",
+]
+omit = [
+  "**/preprocessor/migrations/env.py",
+  "**/preprocessor/cli/interactive/*",
+]
+
+[tool.coverage.paths]
+source = [
+  "src/preprocessor/",
+  "**/site-packages/preprocessor/",
+  "**/site-packages/preprocessor*/preprocessor/",
+]
+
+[tool.coverage.report]
+exclude_also = [
+  # Ignore TYPE_CHECKING blocks
+  '''if (t\.)?TYPE_CHECKING:''',
+  # Ignore assert_never type checks
+  '''(t\.)?assert_never''',
+  # Ignore ellipsis in abstract methods
+  "\\.\\.\\.",
+  # Comments to turn coverage on and off
+  'no cover: start(?s:.)*?no cover: stop',
+]
+precision = 2
+show_missing = true
+skip_covered = true
+
+[tool.commitizen]
+name = "cz_version_bump"
+version = "4.2.0"
+prerelease_offset = 1
+tag_format = "v$major.$minor.$patch$prerelease"
+version_files = [
+  "pyproject.toml:^version =",
+  'docs/package.json:^  "version":',
+  ".github/ISSUE_TEMPLATE/bug.yml:^      placeholder:",
+]
+
+[tool.mypy]
+check_untyped_defs = true
+enable_error_code = [
+  "ignore-without-code",
+  "redundant-expr",
+  "truthy-bool",
+  "exhaustive-match",
+  "deprecated",
+]
+incremental = true
+files = [
+  "src/preprocessor/",
+]
+follow_untyped_imports = true
+exclude = [
+  "src/preprocessor/migrations/",
+]
+local_partial_types = true
+strict = false
+warn_redundant_casts = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+# The following whitelist is used to allow for incremental adoption
+# of MyPy. Modules should be removed from this whitelist as and when
+# their respective type errors have been addressed. No new modules
+# should be added to this whitelist.
+[[tool.mypy.overrides]]
+ignore_errors = true
+module = [
+  # Way too many modules at the root of preprocessor.core to tackle them all at once  # so listing them individually here.
+  "preprocessor.core.transform_add_service",
+  # Meltano Core submodules
+  "preprocessor.core.behavior.canonical",
+  "preprocessor.core.behavior.hookable",
+  "preprocessor.core.behavior.name_eq",
+  "preprocessor.core.behavior.visitor",
+  "preprocessor.core.block.extract_load",
+  "preprocessor.core.block.plugin_command",
+  "preprocessor.core.plugin.base",
+  "preprocessor.core.plugin.dbt.*",
+  "preprocessor.core.plugin.preprocessor_file",
+  "preprocessor.core.plugin.project_plugin",
+  "preprocessor.core.plugin.settings_service",
+  "preprocessor.core.runner.*",
+  "preprocessor.core.tracking.*",
+  "preprocessor.core.utils.*",
+]
+
+[tool.ty.rules]
+unused-type-ignore-comment = "ignore"
+
+[tool.ty.src]
+include = [
+  "src/",
+]
+exclude = [
+  "src/preprocessor/cli/elt.py",
+  "src/preprocessor/cli/utils.py",
+  "src/preprocessor/core/behavior/canonical.py",
+  "src/preprocessor/core/behavior/hookable.py",
+  "src/preprocessor/core/behavior/name_eq.py",
+  "src/preprocessor/core/block/extract_load.py",
+  "src/preprocessor/core/block/plugin_command.py",
+  "src/preprocessor/core/job/job.py",
+  "src/preprocessor/core/manifest/manifest.py",
+  "src/preprocessor/core/plugin/airflow.py",
+  "src/preprocessor/core/plugin/base.py",
+  "src/preprocessor/core/plugin/preprocessor_file.py",
+  "src/preprocessor/core/plugin/project_plugin.py",
+  "src/preprocessor/core/project_plugins_service.py",
+  "src/preprocessor/core/runner/dbt.py",
+  "src/preprocessor/core/runner/singer.py",
+  "src/preprocessor/core/settings_store.py",
+  "src/preprocessor/core/sqlalchemy.py",
+  "src/preprocessor/core/tracking/**",
+  "src/preprocessor/core/utils/**",
+  "src/preprocessor/migrations/**",
+]
+
+[tool.ruff]
+line-length = 88
+required-version = ">=0.15"
+
+[tool.ruff.lint]
+future-annotations = true
+ignore = [
+  "A003",   # Allow ORM attributes such as `id`
+  "ANN",    # The current codebase is not fully typed yet
+  "ARG",    # Interfaces intentionally accept unused extensibility args
+  "B008",   # FastAPI dependency injection uses calls in defaults
+  "B026",   # Existing adapter forwarding style uses star args after keywords
+  "BLE001", # Background tasks intentionally record unexpected failures
+  "D",      # The current codebase does not require exhaustive docstrings
+  "DTZ003", # Keep existing naive UTC datetime behavior for now
+  "E501",   # Defer line wrapping cleanup to focused refactors
+  "ERA001", # Don't remove commented-out code
+  "FBT",    # Existing public APIs use positional boolean flags
+  "G004",   # Existing logging style uses f-strings
+  "ICN003", # Allow explicit typing imports in existing modules
+  "INP001", # Allow implicit namespace packages
+  "LOG015", # Allow existing root logger calls
+  "N818",   # Allow Exceptions to have suffix 'Exception' rather than 'Error'
+  "RUF003", # Allow Chinese punctuation in Chinese comments
+  "S108",   # Existing temp file naming is explicit in background processing
+  "S310",   # Allow `urllib.open`
+  "S603",   # Allow `subprocess.run(..., shell=False)`
+  "TC002",  # SQLAlchemy Mapped annotations are needed at runtime
+  "TID251", # Allow standard logging while structlog is not configured here
+  "TRY401", # Keep current exception log messages
+  "COM812", # Handled by the Ruff formatter
+  "ISC001", # Handled by the Ruff formatter
+]
+select = [
+  "A",     # flake8-builtins
+  "ANN",   # flake8-annotations
+  "ARG",   # flake8-unused-arguments
+  "ASYNC", # flake8-async
+  "B",     # flake8-bugbear
+  "BLE",   # flake8-blind-except
+  "C4",    # flake8-comprehensions
+  "COM",   # flake8-commas
+  "D",     # pydocstyle/flake8-docstrings
+  "DTZ",   # flake8-datetimez
+  "E",     # pycodestyle (error)
+  "EM",    # flake8-errmsg
+  "ERA",   # flake8-eradicate
+  "EXE",   # flake8-executable
+  "F",     # pyflakes
+  "FA",    # flake8-future-annotations
+  "FBT",   # flake8-boolean-trap
+  "FLY",   # flynt
+  "FURB",  # refurb
+  "G",     # flake8-logging-format
+  "I",     # isort
+  "ICN",   # flake8-import-conventions
+  "INP",   # flake8-no-pep420
+  "ISC",   # flake8-implicit-str-concat
+  "LOG",   # flake8-logging
+  "N",     # pep8-naming
+  "PERF",  # Perflint
+  "PGH",   # pygrep-hooks
+  "PIE",   # flake8-pie
+  "PT",    # flake8-pytest-style
+  "PTH",   # flake8-use-pathlib
+  "PYI",   # flake8-pyi
+  "Q",     # flake8-quotes
+  "RET",   # flake8-return
+  "RSE",   # flake8-raise
+  "RUF",   # Ruff specific rules
+  "S",     # flake8-bandit
+  "SIM",   # flake8-simplify
+  "SLOT",  # flake8-slots
+  "T10",   # flake8-debugger
+  "T20",   # flake8-print
+  "TC",    # flake8-type-checking
+  "TID",   # flake8-tidy-imports
+  "TRY",   # tryceratops
+  "UP",    # pyupgrade
+  "W",     # pycodestyle (warning)
+  "YTT",   # flake8-2020
+]
+unfixable = [
+  "ERA001", # Don't remove commented-out code
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/preprocessor/**/__init__.py" = [
+  "F401", # Permit unused imports in `__init__.py` files
+]
+"tests/**" = [
+  "ANN",
+  "D1",
+  "S101",    # Allow 'assert' in tests
+  "INP",     # Don't require __init__.py files in tests directories
+  "LOG015",  # Allow `logging.<level>` in tests
+]
+"src/preprocessor/migrations/versions/*" = [
+  "D103",
+  "INP001",
+]
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+mypy-init-return = true
+suppress-dummy-args = true
+
+[tool.ruff.lint.flake8-import-conventions]
+banned-from = [
+  "typing",
+]
+
+[tool.ruff.lint.flake8-import-conventions.extend-aliases]
+typing = "t"
+
+[tool.ruff.lint.flake8-pytest-style]
+parametrize-values-type = "tuple"
+
+[tool.ruff.lint.isort]
+known-first-party = ["asserts", "fixtures", "preprocessor"]
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"logging.getLogger".msg = "Use `structlog.stdlib.get_logger` instead"
+"preprocessor.cli.cli.command".msg = "Use `click.command` and `preprocessor.cli.cli.add_command` instead"
+"preprocessor.cli.cli.group".msg = "Use `click.group` and `preprocessor.cli.cli.add_command` instead"
+"structlog.dev.ConsoleRenderer".msg = "Use `preprocessor.core.logging.renderers.MeltanoConsoleRenderer` instead"
+
+[tool.check-wheel-contents]
+ignore = [
+  "W004",  # https://github.com/jwodder/check-wheel-contents/issues/5
+]
+
+[tool.uv]
+# Install via: uv tool install graphifyy
+# Run without installing: uvx graphifyy install
+package = true
+override-dependencies = [
+  "sqlalchemy>=2.0.0.dev0,<2.2",
+]
+prerelease = "if-necessary-or-explicit"
+required-version = ">=0.9.17"
+
+[tool.uv.sources]
+tree-sitter-androidlog = { path = "../../js/mtk-log-parser/packages/mtk-android-log-parser", editable = true }
+"tree-sitter-kernellog" = { path = "../../js/mtk-log-parser/packages/mtk-kernel-log-parser", editable = true }
