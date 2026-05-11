@@ -77,7 +77,7 @@ def save_graph(project_root: Path, graph: KnowledgeGraph) -> Path:
     return fp
 
 
-def load_graph(project_root: Path) -> Optional[KnowledgeGraph]:
+def load_graph(project_root: Path) -> KnowledgeGraph | None:
     """Load a knowledge graph from the output directory.
 
     Returns ``None`` if the file does not exist or cannot be parsed.
@@ -105,7 +105,7 @@ def save_meta(project_root: Path, meta: AnalysisMeta) -> Path:
     return fp
 
 
-def load_meta(project_root: Path) -> Optional[AnalysisMeta]:
+def load_meta(project_root: Path) -> AnalysisMeta | None:
     """Load analysis metadata.  Returns ``None`` if missing or corrupt."""
     fp = meta_path(project_root)
     if not fp.is_file():

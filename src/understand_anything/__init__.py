@@ -1,48 +1,13 @@
 """understand-anything-core — Python port of @understand-anything/core."""
+from __future__ import annotations
 
-from understand_anything.types import (
-    # Enums
-    EdgeType,
-    NodeType,
-    # Pydantic models
-    AnalysisMeta,
-    DomainMeta,
-    GraphEdge,
-    GraphNode,
-    KnowledgeGraph,
-    KnowledgeMeta,
-    Layer,
-    ProjectConfig,
-    ProjectMeta,
-    ThemeConfig,
-    TourStep,
-    # Dataclasses
-    CallGraphEntry,
-    ClassInfo,
-    DefinitionInfo,
-    EndpointInfo,
-    ExportInfo,
-    FunctionInfo,
-    ImportInfo,
-    ImportResolution,
-    ReferenceResolution,
-    ResourceInfo,
-    SectionInfo,
-    ServiceInfo,
-    StepInfo,
-    StructuralAnalysis,
-)
-from understand_anything.schema import (
-    COMPLEXITY_ALIASES,
-    DIRECTION_ALIASES,
-    EDGE_TYPE_ALIASES,
-    NODE_TYPE_ALIASES,
-    GraphIssue,
-    ValidationResult,
-    auto_fix_graph,
-    normalize_graph,
-    sanitize_graph,
-    validate_graph,
+from understand_anything.ignore import (
+    DEFAULT_IGNORE_PATTERNS,
+    filter_files,
+    generate_understandignore,
+    guess_ignore_rules,
+    load_ignore_spec,
+    should_ignore,
 )
 from understand_anything.persistence import (
     clear_all,
@@ -62,13 +27,17 @@ from understand_anything.persistence import (
     save_meta,
     touch_meta,
 )
-from understand_anything.ignore import (
-    DEFAULT_IGNORE_PATTERNS,
-    filter_files,
-    generate_understandignore,
-    guess_ignore_rules,
-    load_ignore_spec,
-    should_ignore,
+from understand_anything.schema import (
+    COMPLEXITY_ALIASES,
+    DIRECTION_ALIASES,
+    EDGE_TYPE_ALIASES,
+    NODE_TYPE_ALIASES,
+    GraphIssue,
+    ValidationResult,
+    auto_fix_graph,
+    normalize_graph,
+    sanitize_graph,
+    validate_graph,
 )
 from understand_anything.search import (
     FuzzyMatch,
@@ -78,6 +47,38 @@ from understand_anything.search import (
     fuzzy_search,
     fuzzy_search_nodes,
     search_by_embedding,
+)
+from understand_anything.types import (
+    # Pydantic models
+    AnalysisMeta,
+    # Dataclasses
+    CallGraphEntry,
+    ClassInfo,
+    DefinitionInfo,
+    DomainMeta,
+    # Enums
+    EdgeType,
+    EndpointInfo,
+    ExportInfo,
+    FunctionInfo,
+    GraphEdge,
+    GraphNode,
+    ImportInfo,
+    ImportResolution,
+    KnowledgeGraph,
+    KnowledgeMeta,
+    Layer,
+    NodeType,
+    ProjectConfig,
+    ProjectMeta,
+    ReferenceResolution,
+    ResourceInfo,
+    SectionInfo,
+    ServiceInfo,
+    StepInfo,
+    StructuralAnalysis,
+    ThemeConfig,
+    TourStep,
 )
 
 __all__ = [

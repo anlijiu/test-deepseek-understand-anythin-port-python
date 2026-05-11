@@ -8,12 +8,11 @@ conventions.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
-from rapidfuzz import fuzz, process
+from rapidfuzz import fuzz
 
 from understand_anything.types import GraphNode
-
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -53,7 +52,7 @@ class FuzzyMatch:
 
     item: Any
     score: float  # 0–100
-    key: Optional[str] = None  # which key matched (when searching objects)
+    key: str | None = None  # which key matched (when searching objects)
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +87,7 @@ def _processor(s: str, *, case_sensitive: bool) -> str:
 def fuzzy_search(
     query: str,
     candidates: list[Any],
-    options: Optional[FuzzySearchOptions] = None,
+    options: FuzzySearchOptions | None = None,
 ) -> list[FuzzyMatch]:
     """Search *candidates* for *query* using fuzzy string matching.
 
@@ -139,7 +138,7 @@ def fuzzy_search(
                 scored.append((idx, key, value_str, score * weight))
 
     # Keep best score per candidate
-    best: dict[int, tuple[Any, float, Optional[str]]] = {}
+    best: dict[int, tuple[Any, float, str | None]] = {}
     for idx, key, _value_str, weighted_score in scored:
         if idx not in best or weighted_score > best[idx][1]:
             best[idx] = (candidates[idx], weighted_score, key)

@@ -8,7 +8,6 @@ gitignore-style patterns.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import pathspec
 
@@ -139,7 +138,7 @@ def should_ignore(
     file_path: Path,
     spec: pathspec.PathSpec,
     *,
-    project_root: Optional[Path] = None,
+    project_root: Path | None = None,
 ) -> bool:
     """Check whether *file_path* matches any pattern in *spec*.
 
@@ -154,7 +153,7 @@ def filter_files(
     file_paths: list[Path],
     spec: pathspec.PathSpec,
     *,
-    project_root: Optional[Path] = None,
+    project_root: Path | None = None,
 ) -> list[Path]:
     """Return only the paths from *file_paths* that are **not** ignored."""
     return [

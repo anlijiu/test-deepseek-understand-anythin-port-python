@@ -4,10 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -97,22 +96,22 @@ class EdgeType(StrEnum):
 class KnowledgeMeta(BaseModel):
     """Optional knowledge metadata for article/entity/topic/claim/source nodes."""
 
-    wikilinks: Optional[list[str]] = None
-    backlinks: Optional[list[str]] = None
-    category: Optional[str] = None
-    content: Optional[str] = None
+    wikilinks: list[str] | None = None
+    backlinks: list[str] | None = None
+    category: str | None = None
+    content: str | None = None
 
 
 class DomainMeta(BaseModel):
     """Optional domain metadata for domain/flow/step nodes."""
 
-    entities: Optional[list[str]] = None
-    business_rules: Optional[list[str]] = Field(default=None, alias="businessRules")
-    cross_domain_interactions: Optional[list[str]] = Field(
+    entities: list[str] | None = None
+    business_rules: list[str] | None = Field(default=None, alias="businessRules")
+    cross_domain_interactions: list[str] | None = Field(
         default=None, alias="crossDomainInteractions"
     )
-    entry_point: Optional[str] = Field(default=None, alias="entryPoint")
-    entry_type: Optional[Literal["http", "cli", "event", "cron", "manual"]] = (
+    entry_point: str | None = Field(default=None, alias="entryPoint")
+    entry_type: Literal["http", "cli", "event", "cron", "manual"] | None = (
         Field(default=None, alias="entryType")
     )
 
@@ -130,14 +129,14 @@ class GraphNode(BaseModel):
     id: str
     type: NodeType
     name: str
-    file_path: Optional[str] = Field(default=None, alias="filePath")
-    line_range: Optional[tuple[int, int]] = Field(default=None, alias="lineRange")
+    file_path: str | None = Field(default=None, alias="filePath")
+    line_range: tuple[int, int] | None = Field(default=None, alias="lineRange")
     summary: str
     tags: list[str] = Field(default_factory=list)
     complexity: Literal["simple", "moderate", "complex"]
-    language_notes: Optional[str] = Field(default=None, alias="languageNotes")
-    domain_meta: Optional[DomainMeta] = Field(default=None, alias="domainMeta")
-    knowledge_meta: Optional[KnowledgeMeta] = Field(
+    language_notes: str | None = Field(default=None, alias="languageNotes")
+    domain_meta: DomainMeta | None = Field(default=None, alias="domainMeta")
+    knowledge_meta: KnowledgeMeta | None = Field(
         default=None, alias="knowledgeMeta"
     )
 
@@ -151,7 +150,7 @@ class GraphEdge(BaseModel):
     target: str
     type: EdgeType
     direction: Literal["forward", "backward", "bidirectional"]
-    description: Optional[str] = None
+    description: str | None = None
     weight: float = Field(ge=0.0, le=1.0)
 
 
@@ -173,7 +172,7 @@ class TourStep(BaseModel):
     title: str
     description: str
     node_ids: list[str] = Field(alias="nodeIds")
-    language_lesson: Optional[str] = Field(default=None, alias="languageLesson")
+    language_lesson: str | None = Field(default=None, alias="languageLesson")
 
     model_config = {"populate_by_name": True}
 
@@ -195,7 +194,7 @@ class KnowledgeGraph(BaseModel):
     """Root knowledge graph structure."""
 
     version: str
-    kind: Optional[Literal["codebase", "knowledge"]] = None
+    kind: Literal["codebase", "knowledge"] | None = None
     project: ProjectMeta
     nodes: list[GraphNode]
     edges: list[GraphEdge]
@@ -224,7 +223,7 @@ class AnalysisMeta(BaseModel):
     git_commit_hash: str = Field(alias="gitCommitHash")
     version: str
     analyzed_files: int = Field(alias="analyzedFiles")
-    theme: Optional[ThemeConfig] = None
+    theme: ThemeConfig | None = None
 
     model_config = {"populate_by_name": True}
 
@@ -249,7 +248,7 @@ class FunctionInfo:
     name: str
     line_range: tuple[int, int]
     params: list[str] = field(default_factory=list)
-    return_type: Optional[str] = None
+    return_type: str | None = None
 
 
 @dataclass
@@ -304,16 +303,16 @@ class ServiceInfo:
     """Service/container definition."""
 
     name: str
-    image: Optional[str] = None
+    image: str | None = None
     ports: list[int] = field(default_factory=list)
-    line_range: Optional[tuple[int, int]] = None
+    line_range: tuple[int, int] | None = None
 
 
 @dataclass
 class EndpointInfo:
     """HTTP/gRPC endpoint definition."""
 
-    method: Optional[str] = None
+    method: str | None = None
     path: str = ""
     line_range: tuple[int, int] = (0, 0)
 
@@ -376,4 +375,4 @@ class ReferenceResolution:
     source: str
     target: str
     reference_type: str  # "file", "image", "schema", "service"
-    line: Optional[int] = None
+    line: int | None = None

@@ -9,8 +9,9 @@ in as plain ``list[float]`` / numpy arrays.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Optional, Sequence, Union
+from collections.abc import Sequence
+from dataclasses import dataclass
+from typing import Any, Union
 
 import numpy as np
 
@@ -83,7 +84,7 @@ def _batch_cosine_similarity(
 def search_by_embedding(
     query_embedding: Vector,
     embeddings: list[Vector],
-    candidates: Optional[list[Any]] = None,
+    candidates: list[Any] | None = None,
     *,
     threshold: float = 0.5,
     limit: int = 20,

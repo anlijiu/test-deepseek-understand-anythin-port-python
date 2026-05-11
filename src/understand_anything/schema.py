@@ -9,15 +9,13 @@ missing fields, type coercion).
 
 from __future__ import annotations
 
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError
 
 from understand_anything.types import (
-    DomainMeta,
     GraphEdge,
     GraphNode,
-    KnowledgeMeta,
     Layer,
     ProjectMeta,
     TourStep,
@@ -317,17 +315,17 @@ class GraphIssue(BaseModel):
     level: Literal["auto-corrected", "dropped", "fatal"]
     category: str
     message: str
-    path: Optional[str] = None
+    path: str | None = None
 
 
 class ValidationResult(BaseModel):
     """Full result of the validation pipeline."""
 
     success: bool
-    data: Optional[dict[str, Any]] = None
-    errors: Optional[list[str]] = None
+    data: dict[str, Any] | None = None
+    errors: list[str] | None = None
     issues: list[GraphIssue] = []
-    fatal: Optional[str] = None
+    fatal: str | None = None
 
 
 # ===========================================================================
@@ -348,7 +346,7 @@ def _build_errors(issues: list[GraphIssue], fatal: str | None = None) -> list[st
     messages = [i.message for i in issues]
     if fatal is not None and fatal not in messages:
         messages.insert(0, fatal)
-    return messages if messages else None
+    return messages or None
 
 
 # ===========================================================================
@@ -520,7 +518,7 @@ def auto_fix_graph(data: dict[str, Any]) -> tuple[dict[str, Any], list[GraphIssu
 
 def _validate_with_pydantic(
     model_cls: type[BaseModel], data: dict[str, Any], index: int, label: str
-) -> tuple[Optional[dict[str, Any]], Optional[GraphIssue]]:
+) -> tuple[dict[str, Any] | None, GraphIssue | None]:
     """Try to validate *data* against *model_cls*.
 
     Returns ``(validated_dict, None)`` on success or ``(None, issue)`` on
