@@ -11,12 +11,12 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Union
+from typing import Any
 
 import numpy as np
 
 # Type alias for any numeric vector
-Vector = Union[Sequence[float], np.ndarray]
+Vector = Sequence[float] | np.ndarray
 
 
 # ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ def _batch_cosine_similarity(
 ) -> np.ndarray:
     """Compute cosine similarity between a query vector and every row in *matrix*.
 
-    Returns a 1‑D array of scores in ``[0, 1]``.
+    Returns a 1-D array of scores in ``[0, 1]``.
     """
     q_norm = np.linalg.norm(query_vec)
     if q_norm == 0.0:
@@ -102,7 +102,7 @@ def search_by_embedding(
         Original items corresponding to *embeddings*.  If ``None``, the
         indices are used as the items.
     threshold:
-        Minimum cosine similarity (0–1) to include a result.
+        Minimum cosine similarity (0-1) to include a result.
     limit:
         Maximum number of results to return.  ``0`` means unlimited.
 

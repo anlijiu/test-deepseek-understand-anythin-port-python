@@ -3,7 +3,7 @@ requires = ["hatchling==1.29.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "issue_preprocessor"
+name = "test-deepseek-understand-anything-port-python"
 version = "1.0.0"
 description = "AI preprocess issue"
 readme = "README.md"
@@ -81,7 +81,7 @@ dependencies = [
 ]
 
 [project.scripts]
-preprocessor = "preprocessor.cli:main"
+understand_anything = "understand_anything.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/anlijiu/issue_preprocessor"
@@ -104,7 +104,7 @@ where = ["."]
 include = ["issue*"]
 
 [tool.setuptools.package-data]
-issue_preprocessor = ["skill.md", "skill-codex.md", "skill-opencode.md", "skill-aider.md", "skill-copilot.md", "skill-claw.md", "skill-windows.md", "skill-droid.md", "skill-trae.md", "skill-kiro.md", "skill-vscode.md"]
+understand_anything = ["skill.md", "skill-codex.md", "skill-opencode.md", "skill-aider.md", "skill-copilot.md", "skill-claw.md", "skill-windows.md", "skill-droid.md", "skill-trae.md", "skill-kiro.md", "skill-vscode.md"]
 
 [dependency-groups]
 coverage = [
@@ -157,10 +157,9 @@ include = [
 ]
 
 [tool.hatch.build.targets.wheel]
-include = ["src/preprocessor", "src/understand_anything"]
+include = ["src/understand_anything"]
 
 [tool.hatch.build.targets.wheel.sources]
-"src/preprocessor" = "preprocessor"
 "src/understand_anything" = "understand_anything"
 
 [tool.pytest]
@@ -172,9 +171,6 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "class"
 filterwarnings = [
   'error',
-  # First-party warnings
-  '''once:The 'version' field in preprocessor.yml is deprecated.*:DeprecationWarning''',
-  'once::preprocessor.core._compat.MeltanoInternalDeprecationWarning',
   # Third-party warnings
   'once::pytest.PytestUnraisableExceptionWarning',
   'once::pytest.PytestUnhandledThreadExceptionWarning',
@@ -218,19 +214,19 @@ patch = [
 relative_files = true  # This allows coverage to be measured in Windows
 sigterm = true
 source = [
-  "preprocessor",
+  "understand_anything",
   "tests",
 ]
 omit = [
-  "**/preprocessor/migrations/env.py",
-  "**/preprocessor/cli/interactive/*",
+  "**/understand_anything/migrations/env.py",
+  "**/understand_anything/cli/interactive/*",
 ]
 
 [tool.coverage.paths]
 source = [
-  "src/preprocessor/",
-  "**/site-packages/preprocessor/",
-  "**/site-packages/preprocessor*/preprocessor/",
+  "src/understand_anything/",
+  "**/site-packages/understand_anything/",
+  "**/site-packages/understand_anything*/understand_anything/",
 ]
 
 [tool.coverage.report]
@@ -270,11 +266,11 @@ enable_error_code = [
 ]
 incremental = true
 files = [
-  "src/preprocessor/",
+  "src/understand_anything/",
 ]
 follow_untyped_imports = true
 exclude = [
-  "src/preprocessor/migrations/",
+  "src/understand_anything/migrations/",
 ]
 local_partial_types = true
 strict = false
@@ -290,23 +286,6 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 ignore_errors = true
 module = [
-  # Way too many modules at the root of preprocessor.core to tackle them all at once  # so listing them individually here.
-  "preprocessor.core.transform_add_service",
-  # Meltano Core submodules
-  "preprocessor.core.behavior.canonical",
-  "preprocessor.core.behavior.hookable",
-  "preprocessor.core.behavior.name_eq",
-  "preprocessor.core.behavior.visitor",
-  "preprocessor.core.block.extract_load",
-  "preprocessor.core.block.plugin_command",
-  "preprocessor.core.plugin.base",
-  "preprocessor.core.plugin.dbt.*",
-  "preprocessor.core.plugin.preprocessor_file",
-  "preprocessor.core.plugin.project_plugin",
-  "preprocessor.core.plugin.settings_service",
-  "preprocessor.core.runner.*",
-  "preprocessor.core.tracking.*",
-  "preprocessor.core.utils.*",
 ]
 
 [tool.ty.rules]
@@ -317,27 +296,6 @@ include = [
   "src/",
 ]
 exclude = [
-  "src/preprocessor/cli/elt.py",
-  "src/preprocessor/cli/utils.py",
-  "src/preprocessor/core/behavior/canonical.py",
-  "src/preprocessor/core/behavior/hookable.py",
-  "src/preprocessor/core/behavior/name_eq.py",
-  "src/preprocessor/core/block/extract_load.py",
-  "src/preprocessor/core/block/plugin_command.py",
-  "src/preprocessor/core/job/job.py",
-  "src/preprocessor/core/manifest/manifest.py",
-  "src/preprocessor/core/plugin/airflow.py",
-  "src/preprocessor/core/plugin/base.py",
-  "src/preprocessor/core/plugin/preprocessor_file.py",
-  "src/preprocessor/core/plugin/project_plugin.py",
-  "src/preprocessor/core/project_plugins_service.py",
-  "src/preprocessor/core/runner/dbt.py",
-  "src/preprocessor/core/runner/singer.py",
-  "src/preprocessor/core/settings_store.py",
-  "src/preprocessor/core/sqlalchemy.py",
-  "src/preprocessor/core/tracking/**",
-  "src/preprocessor/core/utils/**",
-  "src/preprocessor/migrations/**",
 ]
 
 [tool.ruff]
@@ -427,7 +385,7 @@ unfixable = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"src/preprocessor/**/__init__.py" = [
+"src/understand_anything/**/__init__.py" = [
   "F401", # Permit unused imports in `__init__.py` files
 ]
 "tests/**" = [
@@ -437,7 +395,7 @@ unfixable = [
   "INP",     # Don't require __init__.py files in tests directories
   "LOG015",  # Allow `logging.<level>` in tests
 ]
-"src/preprocessor/migrations/versions/*" = [
+"src/understand_anything/migrations/versions/*" = [
   "D103",
   "INP001",
 ]
@@ -459,7 +417,7 @@ typing = "t"
 parametrize-values-type = "tuple"
 
 [tool.ruff.lint.isort]
-known-first-party = ["asserts", "fixtures", "preprocessor"]
+known-first-party = ["asserts", "fixtures", "understand_anything"]
 required-imports = ["from __future__ import annotations"]
 
 [tool.ruff.lint.pydocstyle]
@@ -467,9 +425,9 @@ convention = "google"
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "logging.getLogger".msg = "Use `structlog.stdlib.get_logger` instead"
-"preprocessor.cli.cli.command".msg = "Use `click.command` and `preprocessor.cli.cli.add_command` instead"
-"preprocessor.cli.cli.group".msg = "Use `click.group` and `preprocessor.cli.cli.add_command` instead"
-"structlog.dev.ConsoleRenderer".msg = "Use `preprocessor.core.logging.renderers.MeltanoConsoleRenderer` instead"
+"understand_anything.cli.cli.command".msg = "Use `click.command` and `understand_anything.cli.cli.add_command` instead"
+"understand_anything.cli.cli.group".msg = "Use `click.group` and `understand_anything.cli.cli.add_command` instead"
+"structlog.dev.ConsoleRenderer".msg = "Use `understand_anything.core.logging.renderers.MeltanoConsoleRenderer` instead"
 
 [tool.check-wheel-contents]
 ignore = [

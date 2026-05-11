@@ -141,6 +141,19 @@ def find_first_ancestor_of_type(node: Node, type_name: str) -> Node | None:
     return None
 
 
+def child_by_field_name(node: Node, field_name: str) -> Node | None:
+    """Return the child with the given field name, or ``None``.
+
+    Args:
+        node: Parent node to search.
+        field_name: Field name to look up (e.g. ``"name"``, ``"parameters"``).
+
+    Returns:
+        The child node for the given field, or ``None`` if not found.
+    """
+    return node.child_by_field_name(field_name)
+
+
 def collect_nodes_of_type(node: Node, type_name: str) -> list[Node]:
     """Collect all descendant nodes (including *node*) with type *type_name*.
 

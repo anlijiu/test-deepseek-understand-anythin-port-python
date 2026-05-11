@@ -7,9 +7,12 @@ gitignore-style patterns.
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pathspec
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Default ignore patterns — always applied unless explicitly overridden

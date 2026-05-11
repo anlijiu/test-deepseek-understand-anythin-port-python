@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from understand_anything.types import AnalysisMeta, KnowledgeGraph, ProjectConfig
 
@@ -160,10 +162,11 @@ def load_fingerprints(project_root: Path) -> dict[str, str]:
         return {}
     try:
         data = json.loads(fp.read_text())
+    except json.JSONDecodeError:
+        return {}
+    else:
         if isinstance(data, dict):
             return {str(k): str(v) for k, v in data.items()}
-        return {}
-    except json.JSONDecodeError:
         return {}
 
 

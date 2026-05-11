@@ -13,6 +13,7 @@ from understand_anything.plugins.extractors.base import (
     has_child_of_type,
     traverse,
 )
+from understand_anything.plugins.extractors.python import PythonExtractor
 from understand_anything.plugins.extractors.types import (
     AnalyzerPlugin,
     ExtractorRegistration,
@@ -26,6 +27,7 @@ __all__ = [
     "ExtractorRegistration",
     "LanguageExtractor",
     "PluginModuleInfo",
+    "PythonExtractor",
     "TypeScriptExtractor",
     "collect_nodes_of_type",
     "find_child",

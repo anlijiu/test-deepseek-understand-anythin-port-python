@@ -15,9 +15,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import tree_sitter_python
 import tree_sitter_typescript
 from tree_sitter import Language, Parser
 
+from understand_anything.plugins.extractors.python import PythonExtractor
 from understand_anything.plugins.extractors.types import (
     AnalyzerPlugin,
     ExtractorRegistration,
@@ -70,6 +72,9 @@ def _load_grammar(package: ModuleType, language_func_name: str) -> Language:
 TS_LANGUAGE = _load_grammar(tree_sitter_typescript, "language_typescript")
 TSX_LANGUAGE = _load_grammar(tree_sitter_typescript, "language_tsx")
 
+# Pre-load Python grammar
+PY_LANGUAGE = _load_grammar(tree_sitter_python, "language")
+
 # ---------------------------------------------------------------------------
 # Language → extractor mapping
 # ---------------------------------------------------------------------------
@@ -78,6 +83,7 @@ _BUILTIN_EXTRACTORS: list[ExtractorRegistration] = [
     ExtractorRegistration(language_id="typescript", extractor=TypeScriptExtractor()),
     ExtractorRegistration(language_id="tsx", extractor=TypeScriptExtractor()),
     ExtractorRegistration(language_id="javascript", extractor=TypeScriptExtractor()),
+    ExtractorRegistration(language_id="python", extractor=PythonExtractor()),
 ]
 
 # ---------------------------------------------------------------------------
@@ -88,6 +94,7 @@ _LANGUAGE_GRAMMARS: dict[str, Language] = {
     "typescript": TS_LANGUAGE,
     "tsx": TSX_LANGUAGE,
     "javascript": TS_LANGUAGE,
+    "python": PY_LANGUAGE,
 }
 
 
@@ -320,5 +327,7 @@ class TreeSitterPlugin(AnalyzerPlugin):
             ".cjs": "javascript",
             ".mts": "typescript",
             ".cts": "typescript",
+            ".py": "python",
+            ".pyw": "python",
         }
         return mapping.get(suffix, "unknown")

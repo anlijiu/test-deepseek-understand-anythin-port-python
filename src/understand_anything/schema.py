@@ -208,7 +208,6 @@ def sanitize_graph(data: dict[str, Any]) -> dict[str, Any]:
         sanitized_nodes: list[dict[str, Any]] = []
         for node in data["nodes"]:
             if not isinstance(node, dict):
-                sanitized_nodes.append(node)  # type: ignore[arg-type]
                 continue
             n: dict[str, Any] = dict(node)
             # Null → delete for optional fields
@@ -228,7 +227,6 @@ def sanitize_graph(data: dict[str, Any]) -> dict[str, Any]:
         sanitized_edges: list[dict[str, Any]] = []
         for edge in data["edges"]:
             if not isinstance(edge, dict):
-                sanitized_edges.append(edge)  # type: ignore[arg-type]
                 continue
             e: dict[str, Any] = dict(edge)
             # Null → delete for optional fields
@@ -246,7 +244,6 @@ def sanitize_graph(data: dict[str, Any]) -> dict[str, Any]:
         sanitized_tour: list[dict[str, Any]] = []
         for step in result["tour"]:
             if not isinstance(step, dict):
-                sanitized_tour.append(step)  # type: ignore[arg-type]
                 continue
             s: dict[str, Any] = dict(step)
             if s.get("languageLesson") is None:
@@ -283,7 +280,7 @@ def normalize_graph(data: dict[str, Any]) -> dict[str, Any]:
                 n["type"] = NODE_TYPE_ALIASES[node["type"]]
                 normalized_nodes.append(n)
             else:
-                normalized_nodes.append(node)  # type: ignore[arg-type]
+                normalized_nodes.append(node)
         result["nodes"] = normalized_nodes
 
     if isinstance(data.get("edges"), list):
@@ -298,7 +295,7 @@ def normalize_graph(data: dict[str, Any]) -> dict[str, Any]:
                 e["type"] = EDGE_TYPE_ALIASES[edge["type"]]
                 normalized_edges.append(e)
             else:
-                normalized_edges.append(edge)  # type: ignore[arg-type]
+                normalized_edges.append(edge)
         result["edges"] = normalized_edges
 
     return result
@@ -368,7 +365,6 @@ def auto_fix_graph(data: dict[str, Any]) -> tuple[dict[str, Any], list[GraphIssu
         fixed_nodes: list[dict[str, Any]] = []
         for i, node in enumerate(data["nodes"]):
             if not isinstance(node, dict):
-                fixed_nodes.append(node)  # type: ignore[arg-type]
                 continue
             n: dict[str, Any] = dict(node)
             name: str = str(n.get("name") or n.get("id") or f"index {i}")
@@ -430,7 +426,6 @@ def auto_fix_graph(data: dict[str, Any]) -> tuple[dict[str, Any], list[GraphIssu
         fixed_edges: list[dict[str, Any]] = []
         for i, edge in enumerate(data["edges"]):
             if not isinstance(edge, dict):
-                fixed_edges.append(edge)  # type: ignore[arg-type]
                 continue
             e: dict[str, Any] = dict(edge)
 
@@ -475,8 +470,7 @@ def auto_fix_graph(data: dict[str, Any]) -> tuple[dict[str, Any], list[GraphIssu
                 ))
             elif isinstance(weight, str):
                 try:
-                    parsed = float(weight)
-                    e["weight"] = parsed
+                    e["weight"] = float(weight)
                     issues.append(GraphIssue(
                         level="auto-corrected",
                         category="type-coercion",
@@ -493,15 +487,15 @@ def auto_fix_graph(data: dict[str, Any]) -> tuple[dict[str, Any], list[GraphIssu
                     ))
 
             # Clamp weight to [0, 1]
-            if isinstance(e.get("weight"), (int, float)):
-                w = float(e["weight"])
+            raw_weight = e.get("weight")
+            if isinstance(raw_weight, (int, float)):
+                w = float(raw_weight)
                 if w < 0 or w > 1:
-                    original = w
                     e["weight"] = max(0.0, min(1.0, w))
                     issues.append(GraphIssue(
                         level="auto-corrected",
                         category="out-of-range",
-                        message=f'edges[{i}]: weight {original} clamped to {e["weight"]}',
+                        message=f'edges[{i}]: weight {w!r} out of range — clamped to {e["weight"]}',
                         path=f"edges[{i}].weight",
                     ))
 
@@ -621,11 +615,13 @@ def validate_graph(data: Any) -> ValidationResult:
         for i, node in enumerate(fixed["nodes"]):
             if not isinstance(node, dict):
                 continue
-            validated, issue = _validate_with_pydantic(GraphNode, node, i, "nodes")
-            if validated is not None:
-                valid_nodes.append(validated)
-            elif issue is not None:
-                issues.append(issue)
+            validated_node, node_issue = _validate_with_pydantic(
+                GraphNode, node, i, "nodes"
+            )
+            if validated_node is not None:
+                valid_nodes.append(validated_node)
+            elif node_issue is not None:
+                issues.append(node_issue)
 
     # Tier 4: Fatal — no valid nodes
     if not valid_nodes:
@@ -646,29 +642,31 @@ def validate_graph(data: Any) -> ValidationResult:
         for i, edge in enumerate(fixed["edges"]):
             if not isinstance(edge, dict):
                 continue
-            validated, issue = _validate_with_pydantic(GraphEdge, edge, i, "edges")
-            if validated is None:
-                if issue is not None:
-                    issues.append(issue)
+            validated_edge, edge_issue = _validate_with_pydantic(
+                GraphEdge, edge, i, "edges"
+            )
+            if validated_edge is None:
+                if edge_issue is not None:
+                    issues.append(edge_issue)
                 continue
             # Referential integrity checks
-            if validated["source"] not in node_ids:
+            if validated_edge["source"] not in node_ids:
                 issues.append(GraphIssue(
                     level="dropped",
                     category="invalid-reference",
-                    message=f'edges[{i}]: source "{validated["source"]}" does not exist in nodes — removed',
+                    message=f'edges[{i}]: source "{validated_edge["source"]}" does not exist in nodes — removed',
                     path=f"edges[{i}].source",
                 ))
                 continue
-            if validated["target"] not in node_ids:
+            if validated_edge["target"] not in node_ids:
                 issues.append(GraphIssue(
                     level="dropped",
                     category="invalid-reference",
-                    message=f'edges[{i}]: target "{validated["target"]}" does not exist in nodes — removed',
+                    message=f'edges[{i}]: target "{validated_edge["target"]}" does not exist in nodes — removed',
                     path=f"edges[{i}].target",
                 ))
                 continue
-            valid_edges.append(validated)
+            valid_edges.append(validated_edge)
 
     # Validate layers (drop broken, filter dangling nodeIds)
     valid_layers: list[dict[str, Any]] = []
@@ -676,14 +674,16 @@ def validate_graph(data: Any) -> ValidationResult:
         for i, layer in enumerate(fixed["layers"]):
             if not isinstance(layer, dict):
                 continue
-            validated, issue = _validate_with_pydantic(Layer, layer, i, "layers")
-            if validated is not None:
-                validated["node_ids"] = [
-                    nid for nid in validated["node_ids"] if nid in node_ids
+            validated_layer, layer_issue = _validate_with_pydantic(
+                Layer, layer, i, "layers"
+            )
+            if validated_layer is not None:
+                validated_layer["node_ids"] = [
+                    nid for nid in validated_layer["node_ids"] if nid in node_ids
                 ]
-                valid_layers.append(validated)
-            elif issue is not None:
-                issues.append(issue)
+                valid_layers.append(validated_layer)
+            elif layer_issue is not None:
+                issues.append(layer_issue)
 
     # Validate tour steps (drop broken, filter dangling nodeIds)
     valid_tour: list[dict[str, Any]] = []
@@ -691,14 +691,16 @@ def validate_graph(data: Any) -> ValidationResult:
         for i, step in enumerate(fixed["tour"]):
             if not isinstance(step, dict):
                 continue
-            validated, issue = _validate_with_pydantic(TourStep, step, i, "tour")
-            if validated is not None:
-                validated["node_ids"] = [
-                    nid for nid in validated["node_ids"] if nid in node_ids
+            validated_step, step_issue = _validate_with_pydantic(
+                TourStep, step, i, "tour"
+            )
+            if validated_step is not None:
+                validated_step["node_ids"] = [
+                    nid for nid in validated_step["node_ids"] if nid in node_ids
                 ]
-                valid_tour.append(validated)
-            elif issue is not None:
-                issues.append(issue)
+                valid_tour.append(validated_step)
+            elif step_issue is not None:
+                issues.append(step_issue)
 
     # Build final graph dict
     version = fixed.get("version")

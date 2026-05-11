@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 # ---------------------------------------------------------------------------
 
 
-class NodeType(StrEnum):
+class NodeType(str, Enum):
     """21 node types: 5 code + 8 non-code + 3 domain + 5 knowledge."""
 
     FILE = "file"
@@ -39,7 +39,7 @@ class NodeType(StrEnum):
     SOURCE = "source"
 
 
-class EdgeType(StrEnum):
+class EdgeType(str, Enum):
     """35 edge types in 8 categories."""
 
     # Structural

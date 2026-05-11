@@ -8,11 +8,12 @@ conventions.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from rapidfuzz import fuzz
 
-from understand_anything.types import GraphNode
+if TYPE_CHECKING:
+    from understand_anything.types import GraphNode
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -26,7 +27,7 @@ class FuzzySearchOptions:
     Attributes
     ----------
     threshold:
-        Minimum similarity score (0–100) to include a candidate in results.
+        Minimum similarity score (0-100) to include a candidate in results.
         Default 60 (roughly equivalent to Fuse.js 0.6 threshold).
     limit:
         Maximum number of results to return.  ``0`` means unlimited.
@@ -104,7 +105,9 @@ def fuzzy_search(
     Returns a list of :class:`FuzzyMatch` sorted by descending score.
     """
     opts = options or FuzzySearchOptions()
-    processor_func = lambda s: _processor(s, case_sensitive=opts.case_sensitive)
+
+    def processor_func(s: str) -> str:
+        return _processor(s, case_sensitive=opts.case_sensitive)
 
     # String-only path — simplest and fastest
     if not opts.keys:
@@ -200,6 +203,6 @@ def fuzzy_search_nodes(
     matches = fuzzy_search(query, candidates, options)
     # Map back to original GraphNode objects
     for match in matches:
-        idx = candidates.index(match.item)  # type: ignore[arg-type]
+        idx = candidates.index(match.item)
         match.item = nodes[idx]
     return matches
