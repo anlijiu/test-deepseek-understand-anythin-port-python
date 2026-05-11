@@ -44,6 +44,41 @@ from understand_anything.schema import (
     sanitize_graph,
     validate_graph,
 )
+from understand_anything.persistence import (
+    clear_all,
+    config_path,
+    fingerprints_path,
+    graph_path,
+    load_all,
+    load_config,
+    load_fingerprints,
+    load_graph,
+    load_meta,
+    meta_path,
+    output_dir,
+    save_config,
+    save_fingerprints,
+    save_graph,
+    save_meta,
+    touch_meta,
+)
+from understand_anything.ignore import (
+    DEFAULT_IGNORE_PATTERNS,
+    filter_files,
+    generate_understandignore,
+    guess_ignore_rules,
+    load_ignore_spec,
+    should_ignore,
+)
+from understand_anything.search import (
+    FuzzyMatch,
+    FuzzySearchOptions,
+    SemanticMatch,
+    cosine_similarity,
+    fuzzy_search,
+    fuzzy_search_nodes,
+    search_by_embedding,
+)
 
 __all__ = [
     # Enums
@@ -87,4 +122,37 @@ __all__ = [
     "normalize_graph",
     "auto_fix_graph",
     "validate_graph",
+    # Persistence
+    "clear_all",
+    "config_path",
+    "fingerprints_path",
+    "graph_path",
+    "load_all",
+    "load_config",
+    "load_fingerprints",
+    "load_graph",
+    "load_meta",
+    "meta_path",
+    "output_dir",
+    "save_config",
+    "save_fingerprints",
+    "save_graph",
+    "save_meta",
+    "touch_meta",
+    # Ignore
+    "DEFAULT_IGNORE_PATTERNS",
+    "filter_files",
+    "generate_understandignore",
+    "guess_ignore_rules",
+    "load_ignore_spec",
+    "should_ignore",
+    # Search — fuzzy
+    "FuzzyMatch",
+    "FuzzySearchOptions",
+    "fuzzy_search",
+    "fuzzy_search_nodes",
+    # Search — semantic
+    "SemanticMatch",
+    "cosine_similarity",
+    "search_by_embedding",
 ]
