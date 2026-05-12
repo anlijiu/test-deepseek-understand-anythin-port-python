@@ -1,6 +1,15 @@
 """understand-anything-core — Python port of @understand-anything/core."""
 from __future__ import annotations
 
+from understand_anything.languages import (
+    FilePatternConfig,
+    FrameworkConfig,
+    FrameworkRegistry,
+    LanguageConfig,
+    LanguageRegistry,
+    StrictLanguageConfig,
+    TreeSitterConfig,
+)
 from understand_anything.ignore import (
     DEFAULT_IGNORE_PATTERNS,
     filter_files,
@@ -84,6 +93,13 @@ from understand_anything.types import (
 __all__ = [
     "COMPLEXITY_ALIASES",
     "DEFAULT_IGNORE_PATTERNS",
+    "FilePatternConfig",
+    "FrameworkConfig",
+    "FrameworkRegistry",
+    "LanguageConfig",
+    "LanguageRegistry",
+    "StrictLanguageConfig",
+    "TreeSitterConfig",
     "DIRECTION_ALIASES",
     "EDGE_TYPE_ALIASES",
     "NODE_TYPE_ALIASES",

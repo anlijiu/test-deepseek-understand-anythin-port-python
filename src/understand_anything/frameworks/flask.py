@@ -1,0 +1,37 @@
+"""内置框架配置 — Flask。
+
+Python port of the TypeScript ``flaskConfig``.
+"""
+from __future__ import annotations
+
+from understand_anything.languages.types import FrameworkConfig
+
+flask_config = FrameworkConfig(
+    id="flask",
+    displayName="Flask",
+    languages=["python"],
+    detectionKeywords=[
+        "flask",
+        "flask-restful",
+        "flask-sqlalchemy",
+        "flask-marshmallow",
+        "flask-wtf",
+    ],
+    manifestFiles=[
+        "requirements.txt",
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "Pipfile",
+    ],
+    promptSnippetPath="./frameworks/flask.md",
+    entryPoints=["app.py", "run.py", "wsgi.py"],
+    layerHints={
+        "blueprints": "api",
+        "views": "api",
+        "models": "data",
+        "forms": "ui",
+        "templates": "ui",
+        "extensions": "config",
+    },
+)

@@ -1,0 +1,45 @@
+"""内置语言配置 — TypeScript。
+
+Python port of the TypeScript ``typescriptConfig``.
+"""
+from __future__ import annotations
+
+from understand_anything.languages.types import (
+    FilePatternConfig,
+    LanguageConfig,
+    TreeSitterConfig,
+)
+
+typescript_config = LanguageConfig(
+    id="typescript",
+    displayName="TypeScript",
+    extensions=[".ts", ".tsx"],
+    treeSitter=TreeSitterConfig(
+        wasmPackage="tree-sitter-typescript",
+        wasmFile="tree-sitter-typescript.wasm",
+    ),
+    concepts=[
+        "generics",
+        "type guards",
+        "discriminated unions",
+        "utility types",
+        "decorators",
+        "enums",
+        "interfaces",
+        "type inference",
+        "mapped types",
+        "conditional types",
+        "template literal types",
+    ],
+    filePatterns=FilePatternConfig(
+        entryPoints=[
+            "src/index.ts",
+            "src/main.ts",
+            "src/App.tsx",
+            "index.ts",
+        ],
+        barrels=["index.ts"],
+        tests=["*.test.ts", "*.spec.ts", "*.test.tsx"],
+        config=["tsconfig.json"],
+    ),
+)

@@ -1,0 +1,25 @@
+"""内置框架配置 — Gin。
+
+Python port of the TypeScript ``ginConfig``.
+"""
+from __future__ import annotations
+
+from understand_anything.languages.types import FrameworkConfig
+
+gin_config = FrameworkConfig(
+    id="gin",
+    displayName="Gin",
+    languages=["go"],
+    detectionKeywords=["github.com/gin-gonic/gin"],
+    manifestFiles=["go.mod"],
+    promptSnippetPath="./frameworks/gin.md",
+    entryPoints=["main.go", "cmd/server/main.go"],
+    layerHints={
+        "handlers": "api",
+        "routes": "api",
+        "models": "data",
+        "middleware": "middleware",
+        "services": "service",
+        "repository": "data",
+    },
+)
