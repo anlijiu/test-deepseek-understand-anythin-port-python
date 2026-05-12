@@ -2,6 +2,8 @@
 
 ## 1. 概述
 
+原 understand-anything-core 绝对位置 在 /home/an/workspace/ai/Understand-Anything/understand-anything-plugin/packages/core     , 它是项目 Understand-Anything ( 绝对位置  /home/an/workspace/ai/Understand-Anything/) 的核心模块
+
 ### 1.1 目标
 
 将 `@understand-anything/core` (TypeScript, ~11,000 行) 完整移植为 Python 包 `understand-anything-core`，功能等价、API 风格 Python 化、测试覆盖等价。

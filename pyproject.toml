@@ -11,7 +11,7 @@ license = { file = "LICENSE" }
 keywords = ["claude", "claude-code", "codex", "opencode", "cursor", "gemini", "aider", "kiro", "knowledge-graph", "rag", "graphrag", "obsidian", "community-detection", "tree-sitter", "leiden", "llm"]
 requires-python = ">=3.10,<3.14"
 dependencies = [
-    "mypy~=1.20.1",
+    "mypy>=2.1.0",
     "mypy_extensions",
     "fastapi>=0.104.1",
     "uvicorn>=0.24.0",
@@ -141,9 +141,9 @@ typing = [
   "backports-strenum",  # TODO: Drop once the runtime dependency is dropped
   "boto3-stubs[essential]>=1.35",
   "importlib-metadata",  # TODO: Drop once the runtime dependency is dropped
-  "mypy~=1.20.0",
-  "ty==0.0.31",
-  "types-dateparser>=1.2.0.20250208",
+  "mypy>=2.1.0",
+  "ty==0.0.35",
+  "types-dateparser>=1.4.0.20260508",
   "types-jsonschema>=4.23.0.20240813,<5",
   "types-psutil>=7.0.0.20250218,<8",
   "types-pyyaml>=6.0.12.20240917,<7",

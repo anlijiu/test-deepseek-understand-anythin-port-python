@@ -15,10 +15,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import tree_sitter_cpp
 import tree_sitter_python
 import tree_sitter_typescript
 from tree_sitter import Language, Parser
 
+from understand_anything.plugins.extractors.cpp import CppExtractor
 from understand_anything.plugins.extractors.python import PythonExtractor
 from understand_anything.plugins.extractors.types import (
     AnalyzerPlugin,
@@ -75,6 +77,9 @@ TSX_LANGUAGE = _load_grammar(tree_sitter_typescript, "language_tsx")
 # Pre-load Python grammar
 PY_LANGUAGE = _load_grammar(tree_sitter_python, "language")
 
+# Pre-load C/C++ grammar
+CPP_LANGUAGE = _load_grammar(tree_sitter_cpp, "language")
+
 # ---------------------------------------------------------------------------
 # Language → extractor mapping
 # ---------------------------------------------------------------------------
@@ -84,6 +89,8 @@ _BUILTIN_EXTRACTORS: list[ExtractorRegistration] = [
     ExtractorRegistration(language_id="tsx", extractor=TypeScriptExtractor()),
     ExtractorRegistration(language_id="javascript", extractor=TypeScriptExtractor()),
     ExtractorRegistration(language_id="python", extractor=PythonExtractor()),
+    ExtractorRegistration(language_id="cpp", extractor=CppExtractor()),
+    ExtractorRegistration(language_id="c", extractor=CppExtractor()),
 ]
 
 # ---------------------------------------------------------------------------
@@ -95,6 +102,8 @@ _LANGUAGE_GRAMMARS: dict[str, Language] = {
     "tsx": TSX_LANGUAGE,
     "javascript": TS_LANGUAGE,
     "python": PY_LANGUAGE,
+    "cpp": CPP_LANGUAGE,
+    "c": CPP_LANGUAGE,
 }
 
 
@@ -329,5 +338,15 @@ class TreeSitterPlugin(AnalyzerPlugin):
             ".cts": "typescript",
             ".py": "python",
             ".pyw": "python",
+            ".c": "c",
+            ".h": "c",
+            ".cpp": "cpp",
+            ".cc": "cpp",
+            ".cxx": "cpp",
+            ".c++": "cpp",
+            ".hpp": "cpp",
+            ".hh": "cpp",
+            ".hxx": "cpp",
+            ".h++": "cpp",
         }
         return mapping.get(suffix, "unknown")

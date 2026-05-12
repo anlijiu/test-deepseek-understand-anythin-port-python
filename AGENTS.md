@@ -1,6 +1,7 @@
 # test-deepseek-understand-anythin-port-python
 
-
+## Quick Reference 
+**Package Manager**: `uv`
 
 ## 核心行为准则
 
