@@ -64,6 +64,35 @@ def parse_cpp(cpp_parser):
 
 
 @pytest.fixture(scope="session")
+def typescript_language():
+    """Tree-sitter Language for TypeScript (session-scoped)."""
+    import tree_sitter_typescript
+    from tree_sitter import Language
+
+    return Language(tree_sitter_typescript.language_typescript())  # type: ignore[deprecated]
+
+
+@pytest.fixture(scope="session")
+def typescript_parser(typescript_language):
+    """Tree-sitter Parser configured for TypeScript (session-scoped)."""
+    from tree_sitter import Parser
+
+    parser = Parser(typescript_language)
+    return parser
+
+
+@pytest.fixture
+def parse_typescript(typescript_parser):
+    """Parse TypeScript source code string → root node."""
+
+    def _parse(code: str) -> "tree_sitter.Node":  # type: ignore[name-defined]
+        tree = typescript_parser.parse(bytes(code, "utf-8"))
+        return tree.root_node
+
+    return _parse
+
+
+@pytest.fixture(scope="session")
 def java_language():
     """Tree-sitter Language for Java (session-scoped)."""
     import tree_sitter_java
