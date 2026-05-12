@@ -14,6 +14,7 @@ from understand_anything.plugins.extractors.base import (
     traverse,
 )
 from understand_anything.plugins.extractors.cpp import CppExtractor
+from understand_anything.plugins.extractors.java import JavaExtractor
 from understand_anything.plugins.extractors.python import PythonExtractor
 from understand_anything.plugins.extractors.types import (
     AnalyzerPlugin,
@@ -27,6 +28,7 @@ __all__ = [
     "AnalyzerPlugin",
     "CppExtractor",
     "ExtractorRegistration",
+    "JavaExtractor",
     "LanguageExtractor",
     "PluginModuleInfo",
     "PythonExtractor",

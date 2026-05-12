@@ -61,3 +61,32 @@ def parse_cpp(cpp_parser):
         return tree.root_node
 
     return _parse
+
+
+@pytest.fixture(scope="session")
+def java_language():
+    """Tree-sitter Language for Java (session-scoped)."""
+    import tree_sitter_java
+    from tree_sitter import Language
+
+    return Language(tree_sitter_java.language())  # type: ignore[deprecated]
+
+
+@pytest.fixture(scope="session")
+def java_parser(java_language):
+    """Tree-sitter Parser configured for Java (session-scoped)."""
+    from tree_sitter import Parser
+
+    parser = Parser(java_language)
+    return parser
+
+
+@pytest.fixture
+def parse_java(java_parser):
+    """Parse Java source code string → root node."""
+
+    def _parse(code: str) -> "tree_sitter.Node":  # type: ignore[name-defined]
+        tree = java_parser.parse(bytes(code, "utf-8"))
+        return tree.root_node
+
+    return _parse
