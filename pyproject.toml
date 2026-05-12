@@ -3,7 +3,7 @@ requires = ["hatchling==1.29.0"]
 build-backend = "hatchling.build"
 
 [project]
-name = "test-deepseek-understand-anything-port-python"
+name = "understand-anything"
 version = "1.0.0"
 description = "AI preprocess issue"
 readme = "README.md"

@@ -29,7 +29,9 @@
 + **配置**: `src/understand_anything/config.py` 
 
 ## 约束
-+ cli 胶水层在 src/understand_anything/cli 目录
+1. cli 胶水层在 src/understand_anything/cli 目录
    - 命令行实现用 click 库
    - 每个 top-level command 一个独立文件
    - 类似 `/home/an/workspace/python/meltano/src/meltano/cli` 这种处理方式
+2. 所有接口要有中文注释， 本项目使用 MkDocs + mkdocstrings , 接口注释使用 Google 风格 docstring
+
