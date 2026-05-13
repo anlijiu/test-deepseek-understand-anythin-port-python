@@ -1,0 +1,142 @@
+当前 pytest 配置错误
+
+按照 docs/plan/python-core-port-plan.md 第 4 层, 实现 analysis/graph_builder.py  analysis/normalize.py   analysis/llm_analyzer.py 。
+要求：先写测试，原项目有测试case的话， 需要follow原项目测试
+
+按照 docs/plan/python-core-port-plan.md 第5 层, 实现
+`analysis/layer_detector.py` — 启发式 + LLM 层次检测
+`analysis/tour_generator.py` — 卡恩算法 + LLM 导览生成
+`analysis/language_lesson.py` — 概念检测 + 课程提示词
+`analysis/fingerprint.py` — SHA-256 + 结构指纹
+`analysis/staleness.py` — Git diff 封装
+`analysis/change_classifier.py` — 更新决策矩阵
+
+要求：先写测试，原项目有测试case的话， 需要follow原项目测试
+
+
+
+
+
+
+
+高：merge_graph_update() 会保留指向已删除节点的 layers 和 tour，合并后的图不再自洽。
+     代码在移除 changed file 的旧节点和旧边后，直接把 existing_graph.layers 和
+     existing_graph.tour 原样返回：见 src/understand_anything/analysis/staleness.py:95、
+     src/understand_anything/analysis/staleness.py:101。如果 changed file 的节点 ID 变化，
+     或者函数/类节点被删除，Layer.node_ids 和 TourStep.node_ids 会继续引用不存在的旧节点。
+     我用只读片段复现：旧节点 old 被替换成 new 后，输出仍是 ['old'] ['old']。这会污染后续
+     导览、高亮、层级展示。现有测试只验证节点和边，没有验证 layers/tour 的引用完整性，见
+     tests/test_staleness.py:145。
+     建议：让 merge_graph_update() 接收更新后的 layers/tour
+
+
+ 高：classify_update() 无法检测“删除最后一个目录”这种目录结构变化，会把应当架构更新的
+     变更降级为 PARTIAL_UPDATE。
+     决策矩阵说明“new/deleted directories” 应触发 ARCHITECTURE_UPDATE，见 src/
+     understand_anything/analysis/change_classifier.py:40。但 _detect_directory_changes()
+     用 all_known_files 直接构建 existing_dirs，然后检查 deleted file 的目录是否“不在
+     existing_dirs”中，见 src/understand_anything/analysis/change_classifier.py:149、src/
+     understand_anything/analysis/change_classifier.py:159。如果 all_known_files 是删除前
+     的已知文件列表，那么被删除文件所在目录天然就在 existing_dirs 里，所以删除目录永远不会
+     被识别。
+     复现输出：deleted_files=['old-feature/b.ts'] 且 all_known_files=['old-feature/
+     b.ts','src/a.ts'] 时，结果是 PARTIAL_UPDATE 1 file(s) have structural changes: 1
+     deleted。这与“deleted directories => architecture update”的矩阵不一致。现有测试把
+     old-feature/b.ts 放进 deleted_files，但没有放进 all_known_files，见 tests/
+     test_change_classifier.py:120、tests/test_change_classifier.py:131，因此没有覆盖真实
+     输入形态。
+     建议：对 deleted path，应比较“删除前目录集合”和“删除后目录集合”，即从 all_known_files
+     - deleted_files + new_files 构建新目录集合，再判断目录是否新增/消失。
+
+
+
+
+ 中：fingerprint.py 把“函数体内部逻辑变化”全部归为 COSMETIC，可能跳过会影响图边或摘要
+ 的真实变更。
+ FileFingerprint 只记录函数签名、类签名、imports、exports，见 src/understand_anything/
+ analysis/fingerprint.py:49。当 content hash 变了但这些字段不变时，
+ compare_fingerprints() 返回 COSMETIC，details 还写成 "internal logic changed (no
+ structural impact)"，见 src/understand_anything/analysis/fingerprint.py:202。
+ 这个判断过强。现有图构建支持 calls 边，见 src/understand_anything/analysis/
+ graph_builder.py:303，而 TypeScript extractor 也能收集调用关系，见 src/
+ understand_anything/plugins/extractors/typescript.py:432。函数体中新增/删除调用不会改
+ 变函数签名/import/export，但会改变 call graph 或 LLM 摘要，当前会被 SKIP 跳过。
+ 建议：要么把调用关系、关键节点摘要输入、或者函数体结构 hash 纳入 fingerprint；要么把
+ 这种情况从 COSMETIC 改成更保守的 STRUCTURAL/PARTIAL_UPDATE。如果项目明确只把 public
+ API 变化定义为 structural，也需要在文档和命名上说明，避免把行为变化误称为 cosmetic。
+
+
+
+
+
+
+
+
+
+
+
+
+
+按照 docs/plan/python-core-port-plan.md 第 6 层，                  
+  实现非代码解析器。要求：先写测试                
+
+你是资深开发人员   仅评估本次改动， 本次改动的要求见 docs/plan/python-
+  core-port-plan.md 第 6 层
+
+### P1 - High
+
+  1. src/understand_anything/plugins/parsers/__init__.py:31 第 6 层的
+     PluginRegistry 注册要求未实现
+
+     docs/plan/python-core-port-plan.md:648 明确要求：
+      - 12 个解析器（markdown, yaml, json, toml, env, dockerfile, sql,
+        graphql, protobuf, terraform, makefile, shell）
+      - 所有解析器注册到 PluginRegistry
+
+     当前 register_all_parsers() 只是返回 12 个 parser 实例列表：
+
+     src/understand_anything/plugins/parsers/__init__.py:31
+
+     该函数没有接收 registry、没有调用 registry 的注册 API，也没有把
+     parser 暴露给项目现有分析流程。rg "PluginRegistry|
+     register_all_parsers" 的结果也显示，除了注释和这个 helper 之外，没有
+     实际注册路径；src/understand_anything/plugins/registry.py 当前也不存
+     在。
+
+     影响：直接实例化 parser 的单元测试能过，但真实图构建/插件发现流程不会
+     自动使用这些 parser。按本项目规则“未知即不支持”，当前版本没有证据表明
+     支持“所有解析器注册到 PluginRegistry”。
+
+     建议修复：补齐 PluginRegistry 或接入已有注册入口，让 12 个 parser 在
+     项目插件系统中可发现、可按 languages 路由，并添加注册层测试，至少断言
+     12 个 parser 语言都能从 registry 解析到对应插件。
+
+  ### P2 - Medium
+
+  2. src/understand_anything/plugins/parsers/markdown.py:20 新增接口文档不
+     符合项目“中文注释 + Google 风格 docstring”约束
+
+     用户给出的项目约束要求：所有接口要有中文注释，本项目使用 MkDocs +
+     mkdocstrings，接口注释使用 Google 风格 docstring。当前新增 parser 的
+     公开类和公开方法 docstring 基本都是英文，例如：
+      - src/understand_anything/plugins/parsers/markdown.py:20
+      - src/understand_anything/plugins/parsers/markdown.py:31
+      - src/understand_anything/plugins/parsers/yaml_config.py:19
+
+     这不是运行时 bug，但会影响 MkDocs/mkdocstrings 生成的接口文档一致性，
+     也违反本仓库本地指令。建议把所有新增公开类、公开方法和导出函数的
+     docstring 改成中文 Google 风格；内部私有 helper 可酌情保留简短中文说
+     明。
+  3. tests/test_parsers/test_markdown.py:1 测试只覆盖 parser 本体，没有覆
+     盖第 6 层最关键的注册验收点
+
+     新增测试目录覆盖了 12 个 parser 的直接行为，pytest 也全部通过。但没有
+     测试证明：
+      - register_all_parsers() 返回完整且无重复的 12 个 parser。
+      - 每个 parser 的 languages 都能注册到 PluginRegistry。
+      - 图构建或插件选择流程能通过语言 ID 使用这些 parser。
+
+     这会让第 6 层第二条要求长期处于“代码看起来有 helper，但实际没有接
+     入”的状态。建议新增 tests/test_parsers/test_registry.py 或插件注册相
+     关测试，按文档要求验证真实 registry 集成。
+

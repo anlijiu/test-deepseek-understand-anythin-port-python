@@ -54,6 +54,7 @@ dependencies = [
     "sentence-transformers>=2.2.0",
     "docx2txt==0.8",
     "networkx",
+    "tomli>=2.0; python_version < '3.11'",
     "tree-sitter>=0.23.0",
     "tree-sitter-python",
     "tree-sitter-javascript",
@@ -305,6 +306,8 @@ required-version = ">=0.15"
 [tool.ruff.lint]
 future-annotations = true
 ignore = [
+  "RUF001", # 注释里的中文括号
+  "RUF002", # 注释里的中文标点符号没事
   "A003",   # Allow ORM attributes such as `id`
   "ANN",    # The current codebase is not fully typed yet
   "ARG",    # Interfaces intentionally accept unused extensibility args

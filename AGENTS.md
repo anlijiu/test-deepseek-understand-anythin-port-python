@@ -15,6 +15,7 @@
    + `uv run ty check src`
    + `uv run mypy src`
    + `uv run pytest`
+7. **核心领域对象尽早强类型化**，外部边界可以 dict/json。
 
 
 ## 1.  Architecture Overview (The Big Picture)

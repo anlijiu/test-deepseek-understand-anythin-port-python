@@ -298,3 +298,157 @@ class TestFrameworkRegistryCreateDefault:
         r1 = FrameworkRegistry.create_default()
         r2 = FrameworkRegistry.create_default()
         assert len(r1.get_all_frameworks()) == len(r2.get_all_frameworks())
+
+
+class TestFrameworkRegistryFalsePositives:
+    """Tests that false-positive substring matches are avoided.
+
+    Before structural parsing, bare ``keyword in content`` would match
+    ``"preact"`` as ``"react"`` or ``"flask-login"`` as ``"flask"``.
+    """
+
+    @pytest.fixture
+    def registry(self) -> FrameworkRegistry:
+        reg = FrameworkRegistry()
+        reg.register(FrameworkConfig(
+            id="react",
+            displayName="React",
+            languages=["javascript"],
+            detectionKeywords=["react", "react-dom", "@types/react"],
+            manifestFiles=["package.json"],
+            promptSnippetPath="./react.md",
+        ))
+        reg.register(FrameworkConfig(
+            id="flask",
+            displayName="Flask",
+            languages=["python"],
+            detectionKeywords=["flask", "flask-restful"],
+            manifestFiles=["requirements.txt", "pyproject.toml"],
+            promptSnippetPath="./flask.md",
+        ))
+        reg.register(FrameworkConfig(
+            id="nextjs",
+            displayName="Next.js",
+            languages=["javascript"],
+            detectionKeywords=["next", "@next/font"],
+            manifestFiles=["package.json"],
+            promptSnippetPath="./nextjs.md",
+        ))
+        reg.register(FrameworkConfig(
+            id="vue",
+            displayName="Vue",
+            languages=["javascript"],
+            detectionKeywords=["vue", "@vue/cli-service"],
+            manifestFiles=["package.json"],
+            promptSnippetPath="./vue.md",
+        ))
+        return reg
+
+    def test_preact_not_detected_as_react(self, registry: FrameworkRegistry) -> None:
+        """preact is a substring of 'react' but should NOT match."""
+        manifests = {
+            "package.json": '{"dependencies": {"preact": "^10.0.0"}}',
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "react" not in ids
+
+    def test_flask_login_not_detected_as_flask(self, registry: FrameworkRegistry) -> None:
+        """flask-login contains 'flask' but should NOT match."""
+        manifests = {
+            "requirements.txt": "flask-login==0.6.0\n",
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "flask" not in ids
+
+    def test_flask_login_not_detected_as_flask_pyproject(
+        self, registry: FrameworkRegistry
+    ) -> None:
+        """Same false-positive check via pyproject.toml."""
+        manifests = {
+            "pyproject.toml": (
+                '[project]\n'
+                'dependencies = ["flask-login>=0.6"]\n'
+            ),
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "flask" not in ids
+
+    def test_react_still_detected(self, registry: FrameworkRegistry) -> None:
+        """True positive: react IS detected."""
+        manifests = {
+            "package.json": '{"dependencies": {"react": "^18.0"}}',
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "react" in ids
+
+    def test_flask_still_detected(self, registry: FrameworkRegistry) -> None:
+        """True positive: flask IS detected from requirements.txt."""
+        manifests = {
+            "requirements.txt": "flask==2.3.0\n",
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "flask" in ids
+
+    def test_vue_router_without_vue_not_detected(self, registry: FrameworkRegistry) -> None:
+        """vue-router and vuex without 'vue' should NOT detect vue."""
+        manifests = {
+            "package.json": '{"dependencies": {"vue-router": "^4.0", "vuex": "^4.0"}}',
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "vue" not in ids
+
+    def test_vue_still_detected(self, registry: FrameworkRegistry) -> None:
+        """True positive: vue IS detected."""
+        manifests = {
+            "package.json": '{"dependencies": {"vue": "^3.0", "vue-router": "^4.0"}}',
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "vue" in ids
+
+    def test_next_still_detected(self, registry: FrameworkRegistry) -> None:
+        """True positive: next IS detected from package.json structural parse."""
+        manifests = {
+            "package.json": '{"dependencies": {"next": "^14.0", "react": "^18.0"}}',
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "nextjs" in ids
+
+    def test_next_auth_without_next_not_detected(self, registry: FrameworkRegistry) -> None:
+        """next-auth without 'next' should NOT detect Next.js."""
+        manifests = {
+            "package.json": '{"dependencies": {"next-auth": "^4.0", "react": "^18.0"}}',
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "nextjs" not in ids
+
+    def test_poetry_pyproject_dependencies_are_detected(self) -> None:
+        """Poetry stores dependencies under top-level tool.poetry."""
+        registry = FrameworkRegistry()
+        registry.register(FrameworkConfig(
+            id="django",
+            displayName="Django",
+            languages=["python"],
+            detectionKeywords=["django"],
+            manifestFiles=["pyproject.toml"],
+            promptSnippetPath="./django.md",
+        ))
+
+        manifests = {
+            "pyproject.toml": (
+                "[tool.poetry.dependencies]\n"
+                'python = "^3.12"\n'
+                'django = "^5.0"\n'
+            ),
+        }
+        results = registry.detect_frameworks(manifests)
+        ids = {r.id for r in results}
+        assert "django" in ids

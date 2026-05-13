@@ -8,12 +8,19 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Literal, cast
 
-from understand_anything.types import KnowledgeGraph, ProjectMeta
+from understand_anything.types import (
+    EdgeType,
+    GraphEdge,
+    GraphNode,
+    KnowledgeGraph,
+    NodeType,
+    ProjectMeta,
+)
 
 if TYPE_CHECKING:
-    from understand_anything.languages.registry import (  # type: ignore[import-not-found]
+    from understand_anything.languages.registry import (
         LanguageRegistry,
     )
     from understand_anything.types import (
@@ -27,29 +34,59 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+Complexity = Literal["simple", "moderate", "complex"]
+
 # ---------------------------------------------------------------------------
 # Kind → node type mapping (from KIND_TO_NODE_TYPE in graph-builder.ts)
 # ---------------------------------------------------------------------------
 
-KIND_TO_NODE_TYPE: dict[str, str] = {
-    "table": "table",
-    "view": "table",
-    "index": "table",
-    "message": "schema",
-    "type": "schema",
-    "enum": "schema",
-    "resource": "resource",
-    "module": "resource",
-    "service": "service",
-    "deployment": "service",
-    "job": "pipeline",
-    "stage": "pipeline",
-    "target": "pipeline",
-    "route": "endpoint",
-    "query": "endpoint",
-    "mutation": "endpoint",
-    "variable": "config",
-    "output": "config",
+KIND_TO_NODE_TYPE: dict[str, NodeType] = {
+    "table": NodeType.TABLE,
+    "view": NodeType.TABLE,
+    "index": NodeType.TABLE,
+    "message": NodeType.SCHEMA,
+    "type": NodeType.SCHEMA,
+    "enum": NodeType.SCHEMA,
+    "resource": NodeType.RESOURCE,
+    "module": NodeType.RESOURCE,
+    "service": NodeType.SERVICE,
+    "deployment": NodeType.SERVICE,
+    "job": NodeType.PIPELINE,
+    "stage": NodeType.PIPELINE,
+    "target": NodeType.PIPELINE,
+    "route": NodeType.ENDPOINT,
+    "query": NodeType.ENDPOINT,
+    "mutation": NodeType.ENDPOINT,
+    "variable": NodeType.CONFIG,
+    "output": NodeType.CONFIG,
+}
+
+# ---------------------------------------------------------------------------
+# String → NodeType fallback mapping (for non-code file types)
+# ---------------------------------------------------------------------------
+
+_STR_TO_NODE_TYPE: dict[str, NodeType] = {
+    "file": NodeType.FILE,
+    "function": NodeType.FUNCTION,
+    "class": NodeType.CLASS,
+    "module": NodeType.MODULE,
+    "concept": NodeType.CONCEPT,
+    "config": NodeType.CONFIG,
+    "document": NodeType.DOCUMENT,
+    "service": NodeType.SERVICE,
+    "table": NodeType.TABLE,
+    "endpoint": NodeType.ENDPOINT,
+    "pipeline": NodeType.PIPELINE,
+    "schema": NodeType.SCHEMA,
+    "resource": NodeType.RESOURCE,
+    "domain": NodeType.DOMAIN,
+    "flow": NodeType.FLOW,
+    "step": NodeType.STEP,
+    "article": NodeType.ARTICLE,
+    "entity": NodeType.ENTITY,
+    "topic": NodeType.TOPIC,
+    "claim": NodeType.CLAIM,
+    "source": NodeType.SOURCE,
 }
 
 # ---------------------------------------------------------------------------
@@ -98,6 +135,207 @@ _DEFAULT_EXTENSION_LANG: dict[str, str] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Node factory functions
+# ---------------------------------------------------------------------------
+
+def make_file_node(
+    file_path: str,
+    *,
+    summary: str,
+    tags: list[str],
+    complexity: str,
+) -> GraphNode:
+    """Create a file-type ``GraphNode``.
+
+    Args:
+        file_path: Path to the source file.
+        summary: Human-readable file summary.
+        tags: Tags for categorization.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+    """
+    return GraphNode(
+        id=f"file:{file_path}",
+        type=NodeType.FILE,
+        name=Path(file_path).name,
+        filePath=file_path,
+        summary=summary,
+        tags=tags,
+        complexity=cast("Complexity", complexity),
+    )
+
+
+def make_function_node(
+    file_path: str,
+    name: str,
+    line_range: tuple[int, int],
+    summary: str,
+    complexity: str,
+) -> GraphNode:
+    """Create a function-type ``GraphNode``.
+
+    Args:
+        file_path: Path to the containing source file.
+        name: Function name.
+        line_range: Start/end line numbers (1-based, inclusive).
+        summary: One-sentence function summary.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+    """
+    return GraphNode(
+        id=f"function:{file_path}:{name}",
+        type=NodeType.FUNCTION,
+        name=name,
+        filePath=file_path,
+        lineRange=line_range,
+        summary=summary,
+        tags=[],
+        complexity=cast("Complexity", complexity),
+    )
+
+
+def make_class_node(
+    file_path: str,
+    name: str,
+    line_range: tuple[int, int],
+    summary: str,
+    complexity: str,
+) -> GraphNode:
+    """Create a class-type ``GraphNode``.
+
+    Args:
+        file_path: Path to the containing source file.
+        name: Class name.
+        line_range: Start/end line numbers (1-based, inclusive).
+        summary: One-sentence class summary.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+    """
+    return GraphNode(
+        id=f"class:{file_path}:{name}",
+        type=NodeType.CLASS,
+        name=name,
+        filePath=file_path,
+        lineRange=line_range,
+        summary=summary,
+        tags=[],
+        complexity=cast("Complexity", complexity),
+    )
+
+
+def make_generic_node(
+    node_id: str,
+    node_type: NodeType,
+    name: str,
+    file_path: str,
+    summary: str,
+    complexity: str,
+    *,
+    tags: list[str] | None = None,
+    line_range: tuple[int, int] | None = None,
+) -> GraphNode:
+    """Create a ``GraphNode`` with an arbitrary type.
+
+    Args:
+        node_id: Unique node identifier.
+        node_type: The ``NodeType`` enum value.
+        name: Display name.
+        file_path: Path to the containing file.
+        summary: Human-readable summary.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+        tags: Optional tags list.
+        line_range: Optional start/end line numbers.
+    """
+    return GraphNode(
+        id=node_id,
+        type=node_type,
+        name=name,
+        filePath=file_path,
+        summary=summary,
+        tags=tags or [],
+        complexity=cast("Complexity", complexity),
+        lineRange=line_range,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Edge factory functions
+# ---------------------------------------------------------------------------
+
+def make_contains_edge(source_id: str, target_id: str) -> GraphEdge:
+    """Create a ``contains`` edge from parent to child."""
+    return GraphEdge(
+        source=source_id,
+        target=target_id,
+        type=EdgeType.CONTAINS,
+        direction="forward",
+        weight=1.0,
+    )
+
+
+def make_imports_edge(from_file_id: str, to_file_id: str) -> GraphEdge:
+    """Create an ``imports`` edge between two files."""
+    return GraphEdge(
+        source=from_file_id,
+        target=to_file_id,
+        type=EdgeType.IMPORTS,
+        direction="forward",
+        weight=0.7,
+    )
+
+
+def make_calls_edge(
+    caller_id: str, callee_id: str
+) -> GraphEdge:
+    """Create a ``calls`` edge between two functions."""
+    return GraphEdge(
+        source=caller_id,
+        target=callee_id,
+        type=EdgeType.CALLS,
+        direction="forward",
+        weight=0.8,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _to_node_type(type_str: str) -> NodeType:
+    """Map a string to a ``NodeType`` enum value.
+
+    Unknown strings fall back to ``NodeType.CONCEPT`` with a warning.
+    """
+    nt = _STR_TO_NODE_TYPE.get(type_str)
+    if nt is None:
+        logger.warning(
+            '[GraphBuilder] Unknown node type string "%s"'
+            ' — falling back to CONCEPT',
+            type_str,
+        )
+        return NodeType.CONCEPT
+    return nt
+
+
+def _map_kind_to_node_type(kind: str) -> NodeType:
+    """Map a definition kind to a canonical ``NodeType``.
+
+    Unknown kinds fall back to ``NodeType.CONCEPT`` with a warning.
+    """
+    mapped = KIND_TO_NODE_TYPE.get(kind)
+    if mapped is None:
+        logger.warning(
+            '[GraphBuilder] Unknown definition kind "%s"'
+            ' — falling back to CONCEPT node type',
+            kind,
+        )
+        return NodeType.CONCEPT
+    return mapped
+
+
+# ---------------------------------------------------------------------------
+# GraphBuilder
+# ---------------------------------------------------------------------------
+
+
 class GraphBuilder:
     """Incrementally builds a ``KnowledgeGraph`` from file analyses.
 
@@ -131,8 +369,8 @@ class GraphBuilder:
         self._git_hash = git_hash
         self._language_registry = language_registry
 
-        self._nodes: list[dict[str, Any]] = []
-        self._edges: list[dict[str, Any]] = []
+        self._nodes: list[GraphNode] = []
+        self._edges: list[GraphEdge] = []
         self._languages: set[str] = set()
         self._node_ids: set[str] = set()
         self._edge_keys: set[str] = set()
@@ -161,21 +399,11 @@ class GraphBuilder:
         if lang != "unknown":
             self._languages.add(lang)
 
-        name = self._basename(file_path)
-        node_id = f"file:{file_path}"
-
-        self._node_ids.add(node_id)
-        self._nodes.append(
-            {
-                "id": node_id,
-                "type": "file",
-                "name": name,
-                "filePath": file_path,
-                "summary": summary,
-                "tags": tags,
-                "complexity": complexity,
-            }
+        node = make_file_node(
+            file_path, summary=summary, tags=tags, complexity=complexity
         )
+        self._node_ids.add(node.id)
+        self._nodes.append(node)
 
     def add_file_with_analysis(
         self,
@@ -203,74 +431,42 @@ class GraphBuilder:
         if lang != "unknown":
             self._languages.add(lang)
 
-        file_name = self._basename(file_path)
-        file_id = f"file:{file_path}"
-
         # Create the file node
-        self._node_ids.add(file_id)
-        self._nodes.append(
-            {
-                "id": file_id,
-                "type": "file",
-                "name": file_name,
-                "filePath": file_path,
-                "summary": file_summary,
-                "tags": tags,
-                "complexity": complexity,
-            }
+        file_node = make_file_node(
+            file_path,
+            summary=file_summary,
+            tags=tags,
+            complexity=complexity,
         )
+        file_id = file_node.id
+        self._node_ids.add(file_id)
+        self._nodes.append(file_node)
 
         # Create function nodes with "contains" edges
         for fn in analysis.functions:
-            func_id = f"function:{file_path}:{fn.name}"
-            self._node_ids.add(func_id)
-            self._nodes.append(
-                {
-                    "id": func_id,
-                    "type": "function",
-                    "name": fn.name,
-                    "filePath": file_path,
-                    "lineRange": list(fn.line_range),
-                    "summary": summaries.get(fn.name, ""),
-                    "tags": [],
-                    "complexity": complexity,
-                }
+            func_node = make_function_node(
+                file_path,
+                name=fn.name,
+                line_range=fn.line_range,
+                summary=summaries.get(fn.name, ""),
+                complexity=complexity,
             )
-            self._edges.append(
-                {
-                    "source": file_id,
-                    "target": func_id,
-                    "type": "contains",
-                    "direction": "forward",
-                    "weight": 1,
-                }
-            )
+            self._node_ids.add(func_node.id)
+            self._nodes.append(func_node)
+            self._edges.append(make_contains_edge(file_id, func_node.id))
 
         # Create class nodes with "contains" edges
         for cls in analysis.classes:
-            class_id = f"class:{file_path}:{cls.name}"
-            self._node_ids.add(class_id)
-            self._nodes.append(
-                {
-                    "id": class_id,
-                    "type": "class",
-                    "name": cls.name,
-                    "filePath": file_path,
-                    "lineRange": list(cls.line_range),
-                    "summary": summaries.get(cls.name, ""),
-                    "tags": [],
-                    "complexity": complexity,
-                }
+            class_node = make_class_node(
+                file_path,
+                name=cls.name,
+                line_range=cls.line_range,
+                summary=summaries.get(cls.name, ""),
+                complexity=complexity,
             )
-            self._edges.append(
-                {
-                    "source": file_id,
-                    "target": class_id,
-                    "type": "contains",
-                    "direction": "forward",
-                    "weight": 1,
-                }
-            )
+            self._node_ids.add(class_node.id)
+            self._nodes.append(class_node)
+            self._edges.append(make_contains_edge(file_id, class_node.id))
 
     def add_import_edge(self, from_file: str, to_file: str) -> None:
         """Add an ``imports`` edge between two files (deduplicated).
@@ -284,13 +480,9 @@ class GraphBuilder:
             return
         self._edge_keys.add(key)
         self._edges.append(
-            {
-                "source": f"file:{from_file}",
-                "target": f"file:{to_file}",
-                "type": "imports",
-                "direction": "forward",
-                "weight": 0.7,
-            }
+            make_imports_edge(
+                f"file:{from_file}", f"file:{to_file}"
+            )
         )
 
     def add_call_edge(
@@ -316,13 +508,10 @@ class GraphBuilder:
             return
         self._edge_keys.add(key)
         self._edges.append(
-            {
-                "source": f"function:{caller_file}:{caller_func}",
-                "target": f"function:{callee_file}:{callee_func}",
-                "type": "calls",
-                "direction": "forward",
-                "weight": 0.8,
-            }
+            make_calls_edge(
+                f"function:{caller_file}:{caller_func}",
+                f"function:{callee_file}:{callee_func}",
+            )
         )
 
     def add_non_code_file(
@@ -338,7 +527,8 @@ class GraphBuilder:
 
         Args:
             file_path: Path to the non-code file.
-            node_type: The ``GraphNode.type`` to assign.
+            node_type: The ``GraphNode.type`` to assign (string form, e.g.
+                ``"document"``, ``"config"``).
             summary: Human-readable summary.
             tags: Tags for categorization.
             complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
@@ -350,21 +540,19 @@ class GraphBuilder:
         if lang != "unknown":
             self._languages.add(lang)
 
-        name = self._basename(file_path)
         node_id = f"{node_type}:{file_path}"
-
-        self._node_ids.add(node_id)
-        self._nodes.append(
-            {
-                "id": node_id,
-                "type": node_type,
-                "name": name,
-                "filePath": file_path,
-                "summary": summary,
-                "tags": tags,
-                "complexity": complexity,
-            }
+        nt = _to_node_type(node_type)
+        node = make_generic_node(
+            node_id=node_id,
+            node_type=nt,
+            name=Path(file_path).name,
+            file_path=file_path,
+            summary=summary,
+            complexity=complexity,
+            tags=tags,
         )
+        self._node_ids.add(node_id)
+        self._nodes.append(node)
         return node_id
 
     def add_non_code_file_with_analysis(
@@ -406,19 +594,18 @@ class GraphBuilder:
         # Child nodes for definitions
         for defn in definitions or []:
             self._add_child_node(
-                {
-                    "id": f"{defn.kind}:{file_path}:{defn.name}",
-                    "type": self._map_kind_to_node_type(defn.kind),
-                    "name": defn.name,
-                    "filePath": file_path,
-                    "lineRange": list(defn.line_range),
-                    "summary": (
+                make_generic_node(
+                    node_id=f"{defn.kind}:{file_path}:{defn.name}",
+                    node_type=_map_kind_to_node_type(defn.kind),
+                    name=defn.name,
+                    file_path=file_path,
+                    summary=(
                         f"{defn.kind}: {defn.name}"
                         f" ({len(defn.fields)} fields)"
                     ),
-                    "tags": [],
-                    "complexity": complexity,
-                },
+                    complexity=complexity,
+                    line_range=defn.line_range,
+                ),
                 parent_id=file_id,
             )
 
@@ -428,15 +615,14 @@ class GraphBuilder:
             if svc.image:
                 summary_parts.append(f" (image: {svc.image})")
             self._add_child_node(
-                {
-                    "id": f"service:{file_path}:{svc.name}",
-                    "type": "service",
-                    "name": svc.name,
-                    "filePath": file_path,
-                    "summary": "".join(summary_parts),
-                    "tags": [],
-                    "complexity": complexity,
-                },
+                make_generic_node(
+                    node_id=f"service:{file_path}:{svc.name}",
+                    node_type=NodeType.SERVICE,
+                    name=svc.name,
+                    file_path=file_path,
+                    summary="".join(summary_parts),
+                    complexity=complexity,
+                ),
                 parent_id=file_id,
             )
 
@@ -444,48 +630,45 @@ class GraphBuilder:
         for ep in endpoints or []:
             name = f"{ep.method or ''} {ep.path}".strip()
             self._add_child_node(
-                {
-                    "id": f"endpoint:{file_path}:{ep.path}",
-                    "type": "endpoint",
-                    "name": name,
-                    "filePath": file_path,
-                    "lineRange": list(ep.line_range),
-                    "summary": f"Endpoint: {name}",
-                    "tags": [],
-                    "complexity": complexity,
-                },
+                make_generic_node(
+                    node_id=f"endpoint:{file_path}:{ep.path}",
+                    node_type=NodeType.ENDPOINT,
+                    name=name,
+                    file_path=file_path,
+                    summary=f"Endpoint: {name}",
+                    complexity=complexity,
+                    line_range=ep.line_range,
+                ),
                 parent_id=file_id,
             )
 
         # Child nodes for steps
         for step in steps or []:
             self._add_child_node(
-                {
-                    "id": f"step:{file_path}:{step.name}",
-                    "type": "pipeline",
-                    "name": step.name,
-                    "filePath": file_path,
-                    "lineRange": list(step.line_range),
-                    "summary": f"Step: {step.name}",
-                    "tags": [],
-                    "complexity": complexity,
-                },
+                make_generic_node(
+                    node_id=f"step:{file_path}:{step.name}",
+                    node_type=NodeType.PIPELINE,
+                    name=step.name,
+                    file_path=file_path,
+                    summary=f"Step: {step.name}",
+                    complexity=complexity,
+                    line_range=step.line_range,
+                ),
                 parent_id=file_id,
             )
 
         # Child nodes for resources
         for res in resources or []:
             self._add_child_node(
-                {
-                    "id": f"resource:{file_path}:{res.name}",
-                    "type": "resource",
-                    "name": res.name,
-                    "filePath": file_path,
-                    "lineRange": list(res.line_range),
-                    "summary": f"Resource: {res.name} ({res.kind})",
-                    "tags": [],
-                    "complexity": complexity,
-                },
+                make_generic_node(
+                    node_id=f"resource:{file_path}:{res.name}",
+                    node_type=NodeType.RESOURCE,
+                    name=res.name,
+                    file_path=file_path,
+                    summary=f"Resource: {res.name} ({res.kind})",
+                    complexity=complexity,
+                    line_range=res.line_range,
+                ),
                 parent_id=file_id,
             )
 
@@ -506,8 +689,8 @@ class GraphBuilder:
                 analyzedAt=datetime.now(timezone.utc).isoformat(),
                 gitCommitHash=self._git_hash,
             ),
-            nodes=list(self._nodes),  # type: ignore[arg-type]
-            edges=list(self._edges),  # type: ignore[arg-type]
+            nodes=list(self._nodes),
+            edges=list(self._edges),
             layers=[],
             tour=[],
         )
@@ -517,43 +700,20 @@ class GraphBuilder:
     # ------------------------------------------------------------------
 
     def _add_child_node(
-        self, node: dict[str, Any], *, parent_id: str
+        self, node: GraphNode, *, parent_id: str
     ) -> None:
         """Add a child node and a ``contains`` edge from *parent_id*.
 
         Skips duplicate node IDs with a warning.
         """
-        node_id = node["id"]
-        if node_id in self._node_ids:
+        if node.id in self._node_ids:
             logger.warning(
-                '[GraphBuilder] Duplicate node ID "%s" — skipping', node_id
+                '[GraphBuilder] Duplicate node ID "%s" — skipping', node.id
             )
             return
-        self._node_ids.add(node_id)
+        self._node_ids.add(node.id)
         self._nodes.append(node)
-        self._edges.append(
-            {
-                "source": parent_id,
-                "target": node_id,
-                "type": "contains",
-                "direction": "forward",
-                "weight": 1,
-            }
-        )
-
-    def _map_kind_to_node_type(self, kind: str) -> str:
-        """Map a definition kind to a canonical node type.
-
-        Unknown kinds fall back to ``"concept"`` with a warning.
-        """
-        mapped = KIND_TO_NODE_TYPE.get(kind)
-        if mapped is None:
-            logger.warning(
-                '[GraphBuilder] Unknown definition kind "%s"'
-                ' — falling back to "concept" node type',
-                kind,
-            )
-        return mapped or "concept"
+        self._edges.append(make_contains_edge(parent_id, node.id))
 
     def _detect_language(self, file_path: str) -> str:
         """Infer the language ID from a file path.
@@ -577,8 +737,3 @@ class GraphBuilder:
             return "dockerfile"
 
         return _DEFAULT_EXTENSION_LANG.get(suffix, "unknown")
-
-    @staticmethod
-    def _basename(file_path: str) -> str:
-        """Extract the filename from a path."""
-        return Path(file_path).name

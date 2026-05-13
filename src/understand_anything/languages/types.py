@@ -86,9 +86,8 @@ class StrictLanguageConfig(LanguageConfig):
     def check_detectable(self) -> StrictLanguageConfig:
         """验证至少有一个扩展名或文件名可检测。"""
         if not self.extensions and not self.filenames:
-            raise ValueError(
-                "LanguageConfig must have at least one extension or filename for detection"
-            )
+            msg = "LanguageConfig must have at least one extension or filename for detection"
+            raise ValueError(msg)
         return self
 
     model_config = {"populate_by_name": True}
@@ -114,7 +113,8 @@ class FrameworkConfig(BaseModel):
         """验证 languages 列表中的每个元素非空。"""
         for i, lang in enumerate(self.languages):
             if not lang or not lang.strip():
-                raise ValueError(f"languages[{i}] must be a non-empty string")
+                msg = f"languages[{i}] must be a non-empty string"
+                raise ValueError(msg)
         return self
 
     detection_keywords: list[str] = Field(min_length=1, alias="detectionKeywords")

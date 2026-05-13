@@ -6,7 +6,10 @@ Python port of the TypeScript ``LanguageRegistry`` from
 
 from __future__ import annotations
 
-from understand_anything.languages.types import LanguageConfig
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from understand_anything.languages.types import LanguageConfig
 
 
 class LanguageRegistry:

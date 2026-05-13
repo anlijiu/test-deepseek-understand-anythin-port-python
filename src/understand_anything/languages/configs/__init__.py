@@ -1,4 +1,4 @@
-"""内置语言配置聚合 — 36 种语言的完整配置。
+"""内置语言配置聚合 — 40 种语言的完整配置。
 
 Python port of the TypeScript ``configs/index.ts``.
 """

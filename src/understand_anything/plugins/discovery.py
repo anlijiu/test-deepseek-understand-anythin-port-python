@@ -70,6 +70,25 @@ DEFAULT_PLUGIN_CONFIG: PluginConfig = _build_default_config()
 """默认插件配置 — 启用 tree-sitter 插件用于所有带 tree-sitter 语法的语言。"""
 
 
+def _copy_default_plugin_config() -> PluginConfig:
+    """返回默认插件配置的深拷贝，避免调用方污染全局默认配置。
+
+    Returns:
+        默认配置的深拷贝。
+    """
+    return PluginConfig(
+        plugins=[
+            PluginEntry(
+                name=entry.name,
+                enabled=entry.enabled,
+                languages=list(entry.languages),
+                options=dict(entry.options) if entry.options is not None else None,
+            )
+            for entry in DEFAULT_PLUGIN_CONFIG.plugins
+        ]
+    )
+
+
 def parse_plugin_config(json_string: str) -> PluginConfig:
     """从 JSON 字符串解析插件配置。
 
@@ -82,15 +101,15 @@ def parse_plugin_config(json_string: str) -> PluginConfig:
         解析后的 ``PluginConfig``，或默认配置。
     """
     if not json_string.strip():
-        return PluginConfig(plugins=list(DEFAULT_PLUGIN_CONFIG.plugins))
+        return _copy_default_plugin_config()
 
     try:
         parsed = json.loads(json_string)
     except json.JSONDecodeError:
-        return PluginConfig(plugins=list(DEFAULT_PLUGIN_CONFIG.plugins))
+        return _copy_default_plugin_config()
 
     if not isinstance(parsed, dict) or not isinstance(parsed.get("plugins"), list):
-        return PluginConfig(plugins=list(DEFAULT_PLUGIN_CONFIG.plugins))
+        return _copy_default_plugin_config()
 
     entries: list[PluginEntry] = []
     for entry in parsed["plugins"]:
@@ -104,6 +123,11 @@ def parse_plugin_config(json_string: str) -> PluginConfig:
         if not isinstance(name, str) or len(name) == 0:
             continue
         if not isinstance(languages, list) or len(languages) == 0:
+            continue
+
+        # Filter out non-string or empty string elements
+        languages = [lang for lang in languages if isinstance(lang, str) and len(lang) > 0]
+        if len(languages) == 0:
             continue
 
         enabled = entry.get("enabled", True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from understand_anything.analysis.graph_builder import GraphBuilder
 from understand_anything.types import (
@@ -52,6 +53,18 @@ class TestGraphBuilder:
         assert graph.nodes[1].name == "utils.ts"
         assert graph.nodes[1].file_path == "src/utils.ts"
         assert graph.nodes[1].summary == "Utility functions"
+
+    def test_rejects_invalid_node_complexity(self) -> None:
+        """GraphBuilder must preserve GraphNode schema validation."""
+        builder = GraphBuilder("test-project", "abc123")
+
+        with pytest.raises(ValidationError):
+            builder.add_file(
+                "src/index.ts",
+                summary="Entry point",
+                tags=[],
+                complexity="invalid",
+            )
 
     def test_should_create_function_and_class_nodes_from_structural_analysis(
         self,

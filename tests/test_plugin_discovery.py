@@ -137,6 +137,42 @@ class TestParsePluginConfig:
         assert len(cfg.plugins) == 1
         assert cfg.plugins[0].name == "valid"
 
+    def test_filter_non_string_language_elements(self) -> None:
+        """语言列表中的非字符串元素应被过滤。"""
+        json_str = json.dumps({
+            "plugins": [
+                {
+                    "name": "mixed",
+                    "languages": ["python", 123, "", {"bad": True}, "typescript", False],
+                },
+            ],
+        })
+        cfg = parse_plugin_config(json_str)
+        assert len(cfg.plugins) == 1
+        assert cfg.plugins[0].languages == ["python", "typescript"]
+
+    def test_reject_entry_with_all_invalid_language_elements(self) -> None:
+        """如果过滤后语言列表为空，应跳过该条目。"""
+        json_str = json.dumps({
+            "plugins": [
+                {"name": "valid", "languages": ["python"]},
+                {"name": "bad", "languages": [123, "", {"bad": True}]},
+            ],
+        })
+        cfg = parse_plugin_config(json_str)
+        assert len(cfg.plugins) == 1
+        assert cfg.plugins[0].name == "valid"
+
+    def test_reject_entry_with_only_non_string_languages(self) -> None:
+        """语言列表中只有非字符串类型时应跳过该条目。"""
+        json_str = json.dumps({
+            "plugins": [
+                {"name": "numeric-only", "languages": [1, 2, 3]},
+            ],
+        })
+        cfg = parse_plugin_config(json_str)
+        assert len(cfg.plugins) == 0
+
     def test_enabled_defaults_to_true(self) -> None:
         """Entries without 'enabled' field default to true."""
         json_str = json.dumps({
@@ -171,6 +207,36 @@ class TestParsePluginConfig:
         # Mutating one shouldn't affect the other
         cfg1.plugins.append(PluginEntry(name="extra", languages=["x"]))
         assert len(cfg2.plugins) == 1
+
+    def test_mutating_default_result_does_not_pollute_global(self) -> None:
+        """调用方修改返回的 PluginEntry 内部字段不应污染全局默认配置。"""
+        c1 = parse_plugin_config("")
+        assert len(c1.plugins[0].languages) > 0
+        original_count = len(c1.plugins[0].languages)
+
+        # 修改返回对象的 languages 列表
+        c1.plugins[0].languages.clear()
+
+        # 全局默认配置不应受影响
+        assert len(DEFAULT_PLUGIN_CONFIG.plugins[0].languages) == original_count
+
+        # 再次调用默认解析应得到完整配置
+        c2 = parse_plugin_config("")
+        assert len(c2.plugins[0].languages) == original_count
+        assert c2.plugins[0].name == "tree-sitter"
+
+    def test_mutating_default_result_options_does_not_pollute_global(self) -> None:
+        """调用方修改返回的 PluginEntry.options 不应污染全局默认配置。"""
+        c1 = parse_plugin_config("")
+        # 设置 options
+        c1.plugins[0].options = {"key": "value"}
+
+        # 全局默认配置不受影响
+        assert DEFAULT_PLUGIN_CONFIG.plugins[0].options is None
+
+        # 再次调用默认解析，options 应为 None
+        c2 = parse_plugin_config("")
+        assert c2.plugins[0].options is None
 
 
 class TestSerializePluginConfig:

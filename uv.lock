@@ -7240,7 +7240,7 @@ wheels = [
 ]
 
 [[package]]
-name = "understand_anything"
+name = "understand-anything"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
@@ -7286,6 +7286,7 @@ dependencies = [
     { name = "sentence-transformers" },
     { name = "snowflake" },
     { name = "sqlalchemy" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
     { name = "tree-sitter" },
     { name = "tree-sitter-androidlog" },
     { name = "tree-sitter-c" },
@@ -7502,6 +7503,7 @@ requires-dist = [
     { name = "sentence-transformers", specifier = ">=2.2.0" },
     { name = "snowflake", specifier = ">=1.12.0" },
     { name = "sqlalchemy", specifier = ">=2.0.23" },
+    { name = "tomli", marker = "python_full_version < '3.11'", specifier = ">=2.0" },
     { name = "tree-sitter", specifier = ">=0.23.0" },
     { name = "tree-sitter-androidlog", editable = "../../js/mtk-log-parser/packages/mtk-android-log-parser" },
     { name = "tree-sitter-c" },

@@ -1,6 +1,14 @@
 """understand-anything-core — Python port of @understand-anything/core."""
 from __future__ import annotations
 
+from understand_anything.ignore import (
+    DEFAULT_IGNORE_PATTERNS,
+    filter_files,
+    generate_understandignore,
+    guess_ignore_rules,
+    load_ignore_spec,
+    should_ignore,
+)
 from understand_anything.languages import (
     FilePatternConfig,
     FrameworkConfig,
@@ -9,14 +17,6 @@ from understand_anything.languages import (
     LanguageRegistry,
     StrictLanguageConfig,
     TreeSitterConfig,
-)
-from understand_anything.ignore import (
-    DEFAULT_IGNORE_PATTERNS,
-    filter_files,
-    generate_understandignore,
-    guess_ignore_rules,
-    load_ignore_spec,
-    should_ignore,
 )
 from understand_anything.persistence import (
     clear_all,
@@ -93,13 +93,6 @@ from understand_anything.types import (
 __all__ = [
     "COMPLEXITY_ALIASES",
     "DEFAULT_IGNORE_PATTERNS",
-    "FilePatternConfig",
-    "FrameworkConfig",
-    "FrameworkRegistry",
-    "LanguageConfig",
-    "LanguageRegistry",
-    "StrictLanguageConfig",
-    "TreeSitterConfig",
     "DIRECTION_ALIASES",
     "EDGE_TYPE_ALIASES",
     "NODE_TYPE_ALIASES",
@@ -111,6 +104,9 @@ __all__ = [
     "EdgeType",
     "EndpointInfo",
     "ExportInfo",
+    "FilePatternConfig",
+    "FrameworkConfig",
+    "FrameworkRegistry",
     "FunctionInfo",
     "FuzzyMatch",
     "FuzzySearchOptions",
@@ -121,6 +117,8 @@ __all__ = [
     "ImportResolution",
     "KnowledgeGraph",
     "KnowledgeMeta",
+    "LanguageConfig",
+    "LanguageRegistry",
     "Layer",
     "NodeType",
     "ProjectConfig",
@@ -131,9 +129,11 @@ __all__ = [
     "SemanticMatch",
     "ServiceInfo",
     "StepInfo",
+    "StrictLanguageConfig",
     "StructuralAnalysis",
     "ThemeConfig",
     "TourStep",
+    "TreeSitterConfig",
     "ValidationResult",
     "auto_fix_graph",
     "clear_all",
