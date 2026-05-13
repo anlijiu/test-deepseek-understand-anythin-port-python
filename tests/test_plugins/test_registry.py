@@ -5,19 +5,20 @@ from __future__ import annotations
 import pytest
 
 from understand_anything.plugins.parsers import register_all_parsers
-from understand_anything.plugins.parsers.markdown import MarkdownParser
-from understand_anything.plugins.parsers.yaml_config import YAMLConfigParser
-from understand_anything.plugins.parsers.json_config import JSONConfigParser
-from understand_anything.plugins.parsers.toml_config import TOMLParser
-from understand_anything.plugins.parsers.env import EnvParser
 from understand_anything.plugins.parsers.dockerfile import DockerfileParser
-from understand_anything.plugins.parsers.sql import SQLParser
+from understand_anything.plugins.parsers.env import EnvParser
 from understand_anything.plugins.parsers.graphql import GraphQLParser
-from understand_anything.plugins.parsers.protobuf import ProtobufParser
-from understand_anything.plugins.parsers.terraform import TerraformParser
+from understand_anything.plugins.parsers.json_config import JSONConfigParser
 from understand_anything.plugins.parsers.makefile import MakefileParser
+from understand_anything.plugins.parsers.markdown import MarkdownParser
+from understand_anything.plugins.parsers.protobuf import ProtobufParser
 from understand_anything.plugins.parsers.shell import ShellParser
+from understand_anything.plugins.parsers.sql import SQLParser
+from understand_anything.plugins.parsers.terraform import TerraformParser
+from understand_anything.plugins.parsers.toml_config import TOMLParser
+from understand_anything.plugins.parsers.yaml_config import YAMLConfigParser
 from understand_anything.plugins.registry import PluginRegistry
+from understand_anything.plugins.tree_sitter import TreeSitterPlugin
 
 
 class TestPluginRegistry:
@@ -260,3 +261,115 @@ class TestPluginRegistryDispatch:
         # First registered should be MarkdownParser, last ShellParser
         assert isinstance(plugins[0], MarkdownParser)
         assert isinstance(plugins[-1], ShellParser)
+
+
+# ---------------------------------------------------------------------------
+# PluginRegistry + TreeSitterPlugin 集成测试
+# ---------------------------------------------------------------------------
+
+
+_SAMPLE_SRC: dict[str, str] = {
+    "python": "def hello():\n    return 42\n",
+    "tsx": "function hello(): number { return 42; }\n",
+    "typescript": "function hello(): number { return 42; }\n",
+    "javascript": "function hello() { return 42; }\n",
+    "c": "int add(int a, int b) { return a + b; }\n",
+    "cpp": "int add(int a, int b) { return a + b; }\n",
+    "java": "public class Hello { public int getValue() { return 1; } }\n",
+}
+
+
+class TestRegistryTreeSitterIntegration:
+    """PluginRegistry 注册 TreeSitterPlugin 后的分发集成测试。"""
+
+    @pytest.fixture
+    def registry(self) -> PluginRegistry:
+        r = PluginRegistry()
+        r.register(TreeSitterPlugin())
+        return r
+
+    # -- 所有代码扩展名的分发路径 ------------------------------------------
+
+    @pytest.mark.parametrize(
+        ("file_path", "lang"),
+        (
+            (".ts", "typescript"),
+            (".tsx", "tsx"),
+            (".js", "javascript"),
+            (".jsx", "javascript"),
+            (".mjs", "javascript"),
+            (".cjs", "javascript"),
+            (".mts", "typescript"),
+            (".cts", "typescript"),
+            (".py", "python"),
+            (".pyi", "python"),
+            (".pyw", "python"),
+            (".java", "java"),
+            (".c", "c"),
+            (".h", "c"),
+            (".cpp", "cpp"),
+            (".cc", "cpp"),
+            (".cxx", "cpp"),
+            (".c++", "cpp"),
+            (".hpp", "cpp"),
+            (".hh", "cpp"),
+            (".hxx", "cpp"),
+            (".h++", "cpp"),
+        ),
+    )
+    def test_registry_analyzes_all_code_extensions(
+        self, registry: PluginRegistry, file_path: str, lang: str
+    ) -> None:
+        """所有代码扩展名经 registry → TreeSitterPlugin 分发后均能成功分析。"""
+        result = registry.analyze_file(
+            f"test{file_path}", _SAMPLE_SRC[lang]
+        )
+        assert result is not None
+        assert isinstance(result.functions, list)
+
+    # -- 之前不匹配的关键案例 -----------------------------------------------
+
+    def test_pyi_dispatches_to_tree_sitter_and_succeeds(
+        self, registry: PluginRegistry,
+    ) -> None:
+        """.pyi 文件：registry 映射到 "python"→TreeSitterPlugin，
+        TreeSitterPlugin._detect_language 也识别为 "python"，分析成功。"""
+        src = "def hello():\n    ...\n"
+        result = registry.analyze_file("stub.pyi", src)
+        assert result is not None
+        assert len(result.functions) >= 1
+        assert result.functions[0].name == "hello"
+
+    def test_h_dispatches_consistently(
+        self, registry: PluginRegistry,
+    ) -> None:
+        """.h 文件：registry 映射到 "c"，TreeSitterPlugin._detect_language
+        也映射到 "c"，两者一致，分析成功。"""
+        src = "int add(int a, int b);\n"
+        result = registry.analyze_file("header.h", src)
+        assert result is not None
+        assert isinstance(result.functions, list)
+
+    # -- registry 分发失败的用例 --------------------------------------------
+
+    def test_unknown_code_extension_returns_none(
+        self, registry: PluginRegistry,
+    ) -> None:
+        """未注册的代码扩展名（如 .go）不经过 registry 分发，直接返回 None。"""
+        # .go 不在 registry 的 _BUILTIN_EXTENSION_MAP 中
+        assert registry.get_plugin_for_file("test.go") is None
+        assert registry.analyze_file("test.go", "package main\n") is None
+
+    def test_unknown_extension_does_not_crash_plugin(
+        self, registry: PluginRegistry,
+    ) -> None:
+        """registry 匹配到 TreeSitterPlugin，但插件 re-detect 为 "unknown"
+        时应优雅报错（而非静默返回 None 或崩溃）。
+
+        注：当前 .rs 不在 registry 映射中 → get_plugin_for_file 返回 None →
+        analyze_file 返回 None。如果将来 registry 映射扩展了 .rs→"rust"，
+        但 TreeSitterPlugin 不支持 "rust"，则会进入插件内 ValueError。
+        """
+        # 当前行为：.rs 不在 registry 映射 → None
+        result = registry.analyze_file("test.rs", "fn main() {}\n")
+        assert result is None

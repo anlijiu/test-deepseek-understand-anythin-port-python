@@ -59,23 +59,36 @@ class TestDefaultPluginConfig:
         assert len(ts.languages) > 0
 
     def test_default_config_includes_code_languages(self) -> None:
-        """The default tree-sitter plugin covers all languages with tree-sitter grammars."""
+        """默认 tree-sitter 插件应覆盖 TreeSitterPlugin 实际支持的所有语言。
+
+        以 SUPPORTED_TREE_SITTER_LANGUAGES 为准，而非 LanguageConfig 的 treeSitter 字段。
+        """
         ts = DEFAULT_PLUGIN_CONFIG.plugins[0]
-        # All code languages with tree-sitter support should be included
+        # TreeSitterPlugin 实际已实现 extractor 的语言
         assert "python" in ts.languages
         assert "typescript" in ts.languages
+        assert "tsx" in ts.languages
         assert "javascript" in ts.languages
-        assert "go" in ts.languages
-        assert "rust" in ts.languages
+        assert "cpp" in ts.languages
+        assert "c" in ts.languages
         assert "java" in ts.languages
+        # 与实际 SUPPORTED_TREE_SITTER_LANGUAGES 数量一致
+        assert len(ts.languages) == 7
 
     def test_default_config_excludes_non_code_languages(self) -> None:
-        """Non-code languages without tree-sitter grammars should not be in default."""
+        """非代码语言 及 尚未实现 extractor 的语言不应出现在默认配置中。"""
         ts = DEFAULT_PLUGIN_CONFIG.plugins[0]
+        # 非代码语言
         assert "markdown" not in ts.languages
         assert "yaml" not in ts.languages
         assert "json" not in ts.languages
         assert "dockerfile" not in ts.languages
+        # LanguageConfig 有 treeSitter 字段但 TreeSitterPlugin 尚未实现 extractor 的语言
+        assert "csharp" not in ts.languages
+        assert "go" not in ts.languages
+        assert "rust" not in ts.languages
+        assert "ruby" not in ts.languages
+        assert "php" not in ts.languages
 
 
 class TestParsePluginConfig:

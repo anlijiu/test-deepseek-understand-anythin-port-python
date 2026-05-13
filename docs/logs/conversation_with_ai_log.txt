@@ -140,3 +140,62 @@
      入”的状态。建议新增 tests/test_parsers/test_registry.py 或插件注册相
      关测试，按文档要求验证真实 registry 集成。
 
+
+ docs/plan/python-core-port-plan.md  评审一下当前的   对 “第 3 层” 的实现正确性和覆盖程度， 因
+  为目前只支持了几种语言
+
+
+  1. 先修正默认插件配置：不要用 LanguageConfig.tree_sitter != None 表示 TreeSitterPlugin 当前可
+     分析，应该以 TreeSitterPlugin().languages 或一个明确的 SUPPORTED_TREE_SITTER_LANGUAGES 常量
+     为准。否则会持续产生“配置说支持、运行时不支持”的假阳性。
+  2. 增加 tests/test_plugins/test_tree_sitter.py，至少覆盖 analyze_file()
+     对 .ts/.tsx/.js/.py/.c/.cpp/.java 的成功路径，.go/.rs/.rb/.php/.cs 的当前不支持路径，以及
+     register_extractor() 在无 grammar 时的失败语义。
+  3. 为后续语言扩展补齐 grammar 注册 API，例如 ExtractorRegistration 增加 grammar: Language |
+     None，或提供 register_language(language_id, grammar, extractor)。
+  4. 按计划继续移植 Go、Rust、Ruby、PHP、C#，每个 extractor 都保持当前 Python/C++/Java 的测试密
+     度，并补 golden-data 来源说明。
+  5. 对 TypeScript/JavaScript 的 parity 证据补强：如果原项目确实没有测试，就至少生成固定 fixture
+     + expected JSON，并记录它不是上游 golden，而是 Python port contract。
+
+
+  High: register_language() still cannot make analyze_file() work for new languages.
+  src/understand_anything/plugins/tree_sitter.py:337 now provides register_language(language_id,
+  grammar, extractor) and the docstring says it “一步完成语言扩展”, but analyze_file() still
+  depends on the private hardcoded _detect_language() extension map src/understand_anything/
+  plugins/tree_sitter.py:386. That map has no .go/.rs/.rb/.php/.cs entries src/
+  understand_anything/plugins/tree_sitter.py:396, so even after register_language("go",
+  PY_LANGUAGE, PythonExtractor()), plugin.analyze_file("main.go", ...) resolves to "unknown" and
+  fails before the registered extractor/grammar can be used. The new test currently codifies
+  this limitation for register_extractor() tests/test_plugins/test_tree_sitter.py:147, but it
+  means priority 3 is only half-solved: parser construction is extensible, file analysis
+  dispatch is not. Fix by adding an instance-level extension/filename language map, e.g.
+  register_language(..., extensions=[".go"], filenames=None), and make _detect_language consult
+  it before/alongside built-ins.
+
+
+  Medium: grammar override does not invalidate cached parsers, so overrides can silently be
+  ignored.
+  get_parser() caches Parser instances in self._parsers src/understand_anything/plugins/
+  tree_sitter.py:301. register_grammar(), register_extractor(..., grammar=...), and
+  register_language() update self._grammars but do not remove an existing cached parser src/
+  understand_anything/plugins/tree_sitter.py:321. This contradicts the docstring that instance-
+  level grammar can override module-level grammar src/understand_anything/plugins/
+  tree_sitter.py:326. The current override test registers before the first get_parser() call, so
+  it does not catch the stale-cache case. Fix by self._parsers.pop(language_id, None) whenever
+  grammar changes, and add a test that calls get_parser(language_id) before registering a
+  replacement grammar.
+
+  Medium: PluginRegistry + TreeSitterPlugin dispatch still has untested and inconsistent
+  extension behavior.
+  The new test_tree_sitter.py covers direct TreeSitterPlugin.analyze_file(), but not the actual
+  registry chain. PluginRegistry maps .pyi to "python" src/understand_anything/plugins/
+  registry.py:39, while TreeSitterPlugin._detect_language() does not include .pyi src/
+  understand_anything/plugins/tree_sitter.py:405. If a registry has TreeSitterPlugin registered
+  and dispatches foo.pyi, it selects the tree-sitter plugin, but the plugin re-detects the file
+  as "unknown" and raises. There is a similar mismatch for .h: registry maps .h to "cpp" src/
+  understand_anything/plugins/registry.py:45, while TreeSitterPlugin maps .h to "c" src/
+  understand_anything/plugins/tree_sitter.py:409. Add registry integration tests with
+  registry.register(TreeSitterPlugin()), and ideally remove duplicate language detection by
+  letting PluginRegistry pass the resolved language to the plugin or sharing one mapping source.
+

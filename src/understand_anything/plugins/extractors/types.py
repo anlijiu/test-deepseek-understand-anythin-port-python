@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from tree_sitter import Node
+    from tree_sitter import Language, Node
 
     from understand_anything.types import (
         CallGraphEntry,
@@ -166,14 +166,27 @@ class AnalyzerPlugin(ABC):
 
 @dataclass
 class ExtractorRegistration:
-    """Pairs a language ID with its concrete ``LanguageExtractor``.
+    """Pairs a language ID with its concrete ``LanguageExtractor`` and optional grammar.
 
     Used by ``TreeSitterPlugin`` to build the internal language → extractor
-    mapping during initialisation.
+    and language → grammar mappings during initialisation.
+
+    Attributes:
+        language_id: 语言标识符 (e.g. ``"typescript"``)。
+        extractor: 对应的 ``LanguageExtractor`` 实例。
+        grammar: 可选的 ``tree_sitter.Language`` 实例。
+            提供后会在插件初始化时自动注册 grammar。
+        extensions: 可选的文件扩展名列表 (e.g. ``[".go"]``)。
+            提供后会自动注册到实例级扩展名映射，使 ``analyze_file`` 能识别。
+        filenames: 可选的完整文件名列表 (e.g. ``["Makefile"]``)。
+            提供后会自动注册到实例级文件名映射，大小写不敏感。
     """
 
     language_id: str
     extractor: LanguageExtractor
+    grammar: Language | None = None
+    extensions: list[str] | None = None
+    filenames: list[str] | None = None
 
 
 @dataclass

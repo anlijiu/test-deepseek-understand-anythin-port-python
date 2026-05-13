@@ -48,19 +48,22 @@ class PluginConfig:
 
 
 def _build_default_config() -> PluginConfig:
-    """构建默认插件配置 — 启用 tree-sitter 插件用于所有支持的语言。"""
-    from understand_anything.languages.configs import builtin_language_configs
+    """构建默认插件配置 — 启用 tree-sitter 插件用于所有支持的语言。
 
-    tree_sitter_languages = [
-        c.id for c in builtin_language_configs if c.tree_sitter is not None
-    ]
+    以 TreeSitterPlugin 实际注册的 extractor 列表为准，
+    而非 LanguageConfig 中是否声明了 treeSitter 字段。
+    避免"配置说支持、运行时不支持"的假阳性。
+    """
+    from understand_anything.plugins.tree_sitter import (
+        SUPPORTED_TREE_SITTER_LANGUAGES,
+    )
 
     return PluginConfig(
         plugins=[
             PluginEntry(
                 name="tree-sitter",
                 enabled=True,
-                languages=tree_sitter_languages,
+                languages=list(SUPPORTED_TREE_SITTER_LANGUAGES),
             ),
         ],
     )
