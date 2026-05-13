@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 import pathspec
 import pytest
@@ -56,6 +59,27 @@ class TestDefaultPatterns:
         assert "*.tar" in DEFAULT_IGNORE_PATTERNS
         assert "*.gz" in DEFAULT_IGNORE_PATTERNS
 
+    def test_contains_build_cache_patterns(self) -> None:
+        """P1.3: 补齐 TS 默认规则 — build / cache 目录。"""
+        assert "vendor/" in DEFAULT_IGNORE_PATTERNS
+        assert "out/" in DEFAULT_IGNORE_PATTERNS
+        assert "coverage/" in DEFAULT_IGNORE_PATTERNS
+        assert ".cache/" in DEFAULT_IGNORE_PATTERNS
+        assert ".turbo/" in DEFAULT_IGNORE_PATTERNS
+        assert "target/" in DEFAULT_IGNORE_PATTERNS
+        assert "obj/" in DEFAULT_IGNORE_PATTERNS
+
+    def test_contains_generated_patterns(self) -> None:
+        """P1.3: 补齐 TS 默认规则 — minified / map / generated 文件。"""
+        assert "*.min.js" in DEFAULT_IGNORE_PATTERNS
+        assert "*.map" in DEFAULT_IGNORE_PATTERNS
+        assert "*.generated.*" in DEFAULT_IGNORE_PATTERNS
+
+    def test_contains_license_and_gitignore(self) -> None:
+        """P1.3: 补齐 TS 默认规则 — LICENSE 和 .gitignore。"""
+        assert "LICENSE" in DEFAULT_IGNORE_PATTERNS
+        assert ".gitignore" in DEFAULT_IGNORE_PATTERNS
+
 
 # ---------------------------------------------------------------------------
 # Spec loading
@@ -84,6 +108,56 @@ class TestLoadIgnoreSpec:
     def test_missing_files_no_error(self, tmp_path: Path) -> None:
         spec = load_ignore_spec(tmp_path)  # no .gitignore or .understandignore
         assert isinstance(spec, pathspec.PathSpec)
+
+    def test_loads_ua_understandignore(self, tmp_path: Path) -> None:
+        """P1.1: .understand-anything/.understandignore 中的规则生效。"""
+        ua_dir = tmp_path / ".understand-anything"
+        ua_dir.mkdir()
+        (ua_dir / ".understandignore").write_text("ua_internal/\n")
+        spec = load_ignore_spec(
+            tmp_path, include_gitignore=False, include_understandignore=False
+        )
+        assert spec.match_file("ua_internal/foo.py")
+
+    def test_ua_understandignore_missing_no_error(self, tmp_path: Path) -> None:
+        """P1.1: 缺少 .understand-anything/.understandignore 不报错。"""
+        spec = load_ignore_spec(tmp_path)
+        assert isinstance(spec, pathspec.PathSpec)
+
+    def test_negation_overrides_gitignore(self, tmp_path: Path) -> None:
+        """P1.1: 根 .understandignore 中 ! 可覆盖 .gitignore 中的规则。"""
+        (tmp_path / ".gitignore").write_text("important.txt\n")
+        (tmp_path / ".understandignore").write_text("!important.txt\n")
+        spec = load_ignore_spec(tmp_path)
+        # important.txt should NOT be ignored — root .understandignore ! wins
+        assert not spec.match_file("important.txt")
+
+    def test_negation_overrides_defaults(self, tmp_path: Path) -> None:
+        """P1.1: 根 .understandignore 中 ! 可覆盖默认规则。"""
+        # *.lock 在 DEFAULT_IGNORE_PATTERNS 中，会忽略 secrets.lock
+        (tmp_path / ".understandignore").write_text("!secrets.lock\n")
+        spec = load_ignore_spec(tmp_path, include_gitignore=False)
+        # secrets.lock 不应被忽略（! 覆盖了默认的 *.lock）
+        assert not spec.match_file("secrets.lock")
+        # 其他 .lock 文件仍应被忽略
+        assert spec.match_file("other.lock")
+
+    def test_load_order_precedence(self, tmp_path: Path) -> None:
+        """P1.1: 加载顺序验证 — .understandignore 最后加载，! 可覆盖所有。"""
+        # .gitignore 忽略 config.ini
+        (tmp_path / ".gitignore").write_text("config.ini\n")
+        # .understand-anything/.understandignore 也忽略 config.ini
+        ua_dir = tmp_path / ".understand-anything"
+        ua_dir.mkdir()
+        (ua_dir / ".understandignore").write_text("config.ini\n")
+        # 根 .understandignore 用 ! 取消忽略
+        (tmp_path / ".understandignore").write_text("!config.ini\n")
+
+        spec = load_ignore_spec(tmp_path)
+        # config.ini 不应被忽略（根 .understandignore 最后加载的 ! 覆盖一切）
+        assert not spec.match_file("config.ini")
+        # node_modules 仍应被忽略（默认规则，未被否定）
+        assert spec.match_file("node_modules/foo.js")
 
 
 # ---------------------------------------------------------------------------

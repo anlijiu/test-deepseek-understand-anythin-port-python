@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
+from understand_anything.schema import validate_graph
 from understand_anything.types import AnalysisMeta, KnowledgeGraph, ProjectConfig
 
 # ---------------------------------------------------------------------------
@@ -21,9 +20,13 @@ from understand_anything.types import AnalysisMeta, KnowledgeGraph, ProjectConfi
 
 DEFAULT_OUTPUT_DIR = ".understand-anything"
 GRAPH_FILE = "knowledge-graph.json"
-META_FILE = "analysis-meta.json"
+META_FILE = "meta.json"
 FINGERPRINTS_FILE = "fingerprints.json"
-CONFIG_FILE = "project-config.json"
+CONFIG_FILE = "config.json"
+
+# Legacy filenames for backward-compatible reading.
+_LEGACY_META_FILE = "analysis-meta.json"
+_LEGACY_CONFIG_FILE = "project-config.json"
 
 
 # ---------------------------------------------------------------------------
@@ -68,27 +71,81 @@ def config_path(project_root: Path) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _sanitize_graph_file_paths(
+    graph: KnowledgeGraph, project_root: Path
+) -> KnowledgeGraph:
+    """Return a copy of *graph* with all ``filePath`` values sanitised.
+
+    Rules (matching TS ``saveGraph`` behaviour):
+
+    - Absolute paths inside *project_root* → relative to *project_root*
+    - Absolute paths outside *project_root* → basename only
+    - Relative paths → kept as-is
+    - ``None`` → kept as ``None``
+
+    The original *graph* is never mutated.
+    """
+    resolved_root = project_root.resolve()
+    graph_copy = graph.model_copy(deep=True)
+
+    for node in graph_copy.nodes:
+        fp = node.file_path
+        if fp is None:
+            continue
+        path = Path(fp)
+        if path.is_absolute():
+            try:
+                path.relative_to(resolved_root)
+            except ValueError:
+                # Outside project — keep basename only.
+                node.file_path = path.name
+            else:
+                # Inside project — make relative.
+                node.file_path = str(path.relative_to(resolved_root))
+
+    return graph_copy
+
+
 def save_graph(project_root: Path, graph: KnowledgeGraph) -> Path:
     """Serialize *graph* to JSON and write to the output directory.
 
     Returns the path to the written file.
+
+    File paths are sanitised before writing so the persisted JSON never
+    leaks absolute paths (see :func:`_sanitize_graph_file_paths`).
     """
     d = _ensure_output_dir(project_root)
     fp = d / GRAPH_FILE
-    fp.write_text(graph.model_dump_json(indent=2, by_alias=False))
+    sanitized = _sanitize_graph_file_paths(graph, project_root)
+    fp.write_text(sanitized.model_dump_json(indent=2, by_alias=True))
     return fp
 
 
-def load_graph(project_root: Path) -> KnowledgeGraph | None:
+def load_graph(
+    project_root: Path, *, validate: bool = True
+) -> KnowledgeGraph | None:
     """Load a knowledge graph from the output directory.
 
-    Returns ``None`` if the file does not exist or cannot be parsed.
+    Args:
+        project_root: Project root directory.
+        validate: If ``True`` (default), run the project validation pipeline
+            from :func:`understand_anything.schema.validate_graph`; validation
+            failures return ``None``. If ``False``, only parse the JSON into a
+            :class:`KnowledgeGraph` with Pydantic model validation.
+
+    Returns:
+        ``None`` if the file does not exist or cannot be parsed.
     """
     fp = graph_path(project_root)
     if not fp.is_file():
         return None
     try:
         data = json.loads(fp.read_text())
+        if validate:
+            result = validate_graph(data)
+            if not result.success or result.data is None:
+                return None
+            data = result.data
         return KnowledgeGraph.model_validate(data)
     except (json.JSONDecodeError, ValueError):
         return None
@@ -103,13 +160,24 @@ def save_meta(project_root: Path, meta: AnalysisMeta) -> Path:
     """Persist analysis metadata as JSON."""
     d = _ensure_output_dir(project_root)
     fp = d / META_FILE
-    fp.write_text(meta.model_dump_json(indent=2, by_alias=False))
+    fp.write_text(meta.model_dump_json(indent=2, by_alias=True))
     return fp
 
 
 def load_meta(project_root: Path) -> AnalysisMeta | None:
-    """Load analysis metadata.  Returns ``None`` if missing or corrupt."""
-    fp = meta_path(project_root)
+    """Load analysis metadata.  Returns ``None`` if missing or corrupt.
+
+    Tries the contract filename first (``meta.json``), then the legacy
+    Python filename (``analysis-meta.json``) for backward compatibility.
+    """
+    out = output_dir(project_root)
+    fp = out / META_FILE
+    legacy_fp = out / _LEGACY_META_FILE
+
+    # Prefer contract filename; fall back to legacy.
+    if not fp.is_file() and legacy_fp.is_file():
+        fp = legacy_fp
+
     if not fp.is_file():
         return None
     try:
@@ -179,13 +247,23 @@ def save_config(project_root: Path, config: ProjectConfig) -> Path:
     """Persist project configuration (e.g. auto-update opt-in)."""
     d = _ensure_output_dir(project_root)
     fp = d / CONFIG_FILE
-    fp.write_text(config.model_dump_json(indent=2, by_alias=False))
+    fp.write_text(config.model_dump_json(indent=2, by_alias=True))
     return fp
 
 
 def load_config(project_root: Path) -> ProjectConfig:
-    """Load project config.  Returns defaults if file is missing or corrupt."""
-    fp = config_path(project_root)
+    """Load project config.  Returns defaults if file is missing or corrupt.
+
+    Tries the contract filename first (``config.json``), then the legacy
+    Python filename (``project-config.json``) for backward compatibility.
+    """
+    out = output_dir(project_root)
+    fp = out / CONFIG_FILE
+    legacy_fp = out / _LEGACY_CONFIG_FILE
+
+    if not fp.is_file() and legacy_fp.is_file():
+        fp = legacy_fp
+
     if not fp.is_file():
         return ProjectConfig(autoUpdate=False)
     try:

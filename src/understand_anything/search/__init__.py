@@ -8,11 +8,16 @@ from __future__ import annotations
 from understand_anything.search.fuzzy import (
     FuzzyMatch,
     FuzzySearchOptions,
+    SearchEngine,
+    SearchOptions,
+    SearchResult,
     fuzzy_search,
     fuzzy_search_nodes,
 )
 from understand_anything.search.semantic import (
     SemanticMatch,
+    SemanticSearchEngine,
+    SemanticSearchOptions,
     cosine_similarity,
     search_by_embedding,
 )
@@ -20,7 +25,12 @@ from understand_anything.search.semantic import (
 __all__ = [
     "FuzzyMatch",
     "FuzzySearchOptions",
+    "SearchEngine",
+    "SearchOptions",
+    "SearchResult",
     "SemanticMatch",
+    "SemanticSearchEngine",
+    "SemanticSearchOptions",
     "cosine_similarity",
     "fuzzy_search",
     "fuzzy_search_nodes",

@@ -23,8 +23,11 @@ DEFAULT_IGNORE_PATTERNS: list[str] = [
     ".git",
     ".svn",
     ".hg",
-    # Node
+    # VCS config
+    ".gitignore",
+    # Node / JS
     "node_modules",
+    "vendor/",
     # Python
     "__pycache__",
     "*.pyc",
@@ -45,13 +48,25 @@ DEFAULT_IGNORE_PATTERNS: list[str] = [
     # OS
     ".DS_Store",
     "Thumbs.db",
-    # Tool output
+    # Tool / cache output
     ".understand-anything",
+    ".cache/",
+    ".turbo/",
+    "out/",
+    "coverage/",
+    "target/",
+    "obj/",
     # Lockfiles & large generated files
     "package-lock.json",
     "yarn.lock",
     "pnpm-lock.yaml",
     "*.lock",
+    # Minified / generated / map files
+    "*.min.js",
+    "*.map",
+    "*.generated.*",
+    # License files
+    "LICENSE",
     # Binary / media (too large / not useful for analysis)
     "*.png",
     "*.jpg",
@@ -99,25 +114,44 @@ def load_ignore_spec(
     include_gitignore: bool = True,
     include_understandignore: bool = True,
 ) -> pathspec.PathSpec:
-    """Build a combined ``pathspec.PathSpec`` from ignore files.
+    """构建合并的 ``pathspec.PathSpec``，从多个忽略文件中读取规则。
 
-    Reads ``.gitignore`` and ``.understandignore`` from *project_root*
-    (when the corresponding flag is ``True``), merges the patterns with
-    :data:`DEFAULT_IGNORE_PATTERNS`, and returns a ready-to-use spec.
+    加载顺序（后加载的规则可通过 ``!`` 否定覆盖前面的规则）：
 
-    ``.understandignore`` is read **first** so that the project-level
-    config can **remove** previously ignored files (gitignore-style
-    negation with ``!``).
+    1. :data:`DEFAULT_IGNORE_PATTERNS` — 内置默认规则
+    2. ``.gitignore`` — 项目根目录的 gitignore（当 *include_gitignore* 为
+       ``True`` 时；注意这是 Python 端扩展，TypeScript core 不读取
+       ``.gitignore``）
+    3. ``.understand-anything/.understandignore`` — 工具内部 ignore 文件
+    4. ``.understandignore`` — 项目根目录的用户自定义 ignore 文件
+       （当 *include_understandignore* 为 ``True`` 时）
+
+    这样项目根 ``.understandignore`` 中的 ``!`` 规则可以覆盖所有前面的规则。
+
+    Args:
+        project_root: 项目根目录。
+        include_gitignore: 是否读取 ``.gitignore``（默认 ``True``）。
+        include_understandignore: 是否读取 ``.understandignore``（默认
+            ``True``）。
+
+    Returns:
+        合并后的 ``pathspec.PathSpec`` 对象。
     """
     patterns: list[str] = list(DEFAULT_IGNORE_PATTERNS)
 
-    if include_understandignore:
-        ui_path = project_root / ".understandignore"
-        patterns.extend(_read_ignore_file(ui_path))
-
+    # 2. .gitignore（Python 扩展，TS core 不读取）
     if include_gitignore:
         gi_path = project_root / ".gitignore"
         patterns.extend(_read_ignore_file(gi_path))
+
+    # 3. .understand-anything/.understandignore（工具内部规则）
+    ua_ui_path = project_root / ".understand-anything" / ".understandignore"
+    patterns.extend(_read_ignore_file(ua_ui_path))
+
+    # 4. 项目根 .understandignore（用户自定义，最后加载以便 ! 覆盖）
+    if include_understandignore:
+        ui_path = project_root / ".understandignore"
+        patterns.extend(_read_ignore_file(ui_path))
 
     return pathspec.PathSpec.from_lines("gitignore", patterns)
 
