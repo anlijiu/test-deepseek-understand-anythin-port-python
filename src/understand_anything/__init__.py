@@ -4,6 +4,7 @@ from __future__ import annotations
 from understand_anything.ignore import (
     DEFAULT_IGNORE_PATTERNS,
     filter_files,
+    generate_starter_ignore_file,
     generate_understandignore,
     guess_ignore_rules,
     load_ignore_spec,
@@ -153,6 +154,7 @@ __all__ = [
     "fingerprints_path",
     "fuzzy_search",
     "fuzzy_search_nodes",
+    "generate_starter_ignore_file",
     "generate_understandignore",
     "graph_path",
     "guess_ignore_rules",

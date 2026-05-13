@@ -12,6 +12,7 @@ from understand_anything.ignore.filter import (
     should_ignore,
 )
 from understand_anything.ignore.generator import (
+    generate_starter_ignore_file,
     generate_understandignore,
     guess_ignore_rules,
 )
@@ -19,6 +20,7 @@ from understand_anything.ignore.generator import (
 __all__ = [
     "DEFAULT_IGNORE_PATTERNS",
     "filter_files",
+    "generate_starter_ignore_file",
     "generate_understandignore",
     "guess_ignore_rules",
     "load_ignore_spec",
