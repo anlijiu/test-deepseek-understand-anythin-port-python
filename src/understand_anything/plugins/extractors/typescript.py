@@ -134,9 +134,11 @@ class TypeScriptExtractor(LanguageExtractor):
                 analysis.exports.extend(self._extract_exports(node))
 
             elif node_type == _LEXICAL_DECLARATION:
+                self._extract_lexical_functions(node, analysis)
                 self._extract_lexical_exports(node, analysis)
 
             elif node_type == _VARIABLE_DECLARATION:
+                self._extract_lexical_functions(node, analysis)
                 self._extract_variable_exports(node, analysis)
 
         traverse(root_node, visitor)
@@ -396,6 +398,36 @@ class TypeScriptExtractor(LanguageExtractor):
                             is_default=False,
                         )
                     )
+
+    def _extract_lexical_functions(
+        self, node: Node, analysis: StructuralAnalysis
+    ) -> None:
+        """Extract named arrow functions assigned to variables.
+
+        This keeps call-graph callers such as ``handler`` addressable as
+        ``function:{file}:handler`` nodes in the graph.
+        """
+        for decl in find_children(node, "variable_declarator"):
+            name_node = find_child(decl, _IDENTIFIER)
+            arrow_node = find_child(decl, _ARROW_FUNCTION)
+            if name_node is None or arrow_node is None:
+                continue
+
+            name = get_node_text(name_node)
+            if any(fn.name == name for fn in analysis.functions):
+                continue
+
+            analysis.functions.append(
+                FunctionInfo(
+                    name=name,
+                    line_range=(
+                        arrow_node.start_point[0] + 1,
+                        arrow_node.end_point[0] + 1,
+                    ),
+                    params=self._extract_parameters(arrow_node),
+                    return_type=self._extract_return_type(arrow_node),
+                )
+            )
 
     def _extract_variable_exports(
         self, node: Node, analysis: StructuralAnalysis

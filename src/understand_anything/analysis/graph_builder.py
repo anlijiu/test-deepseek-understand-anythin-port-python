@@ -386,7 +386,7 @@ class GraphBuilder:
         summary: str,
         tags: list[str],
         complexity: str,
-    ) -> None:
+    ) -> str:
         """Register a file node without structural analysis children.
 
         Args:
@@ -394,6 +394,9 @@ class GraphBuilder:
             summary: Human-readable file summary.
             tags: Tags for categorization.
             complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+
+        Returns:
+            The node ID assigned to this file.
         """
         lang = self._detect_language(file_path)
         if lang != "unknown":
@@ -404,6 +407,7 @@ class GraphBuilder:
         )
         self._node_ids.add(node.id)
         self._nodes.append(node)
+        return node.id
 
     def add_file_with_analysis(
         self,
@@ -415,7 +419,7 @@ class GraphBuilder:
         complexity: str,
         file_summary: str,
         summaries: dict[str, str],
-    ) -> None:
+    ) -> str:
         """Register a file node with function/class children from analysis.
 
         Args:
@@ -426,6 +430,9 @@ class GraphBuilder:
             complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
             file_summary: Summary for the file node itself.
             summaries: Mapping from function/class name to 1-sentence summary.
+
+        Returns:
+            The file node ID assigned to this file.
         """
         lang = self._detect_language(file_path)
         if lang != "unknown":
@@ -451,11 +458,17 @@ class GraphBuilder:
                 summary=summaries.get(fn.name, ""),
                 complexity=complexity,
             )
+            if func_node.id in self._node_ids:
+                logger.warning(
+                    '[GraphBuilder] Duplicate function node ID "%s" — skipping',
+                    func_node.id,
+                )
+                continue
             self._node_ids.add(func_node.id)
             self._nodes.append(func_node)
             self._edges.append(make_contains_edge(file_id, func_node.id))
 
-        # Create class nodes with "contains" edges
+        # Create class nodes with "contains" edges, plus method child nodes
         for cls in analysis.classes:
             class_node = make_class_node(
                 file_path,
@@ -467,6 +480,33 @@ class GraphBuilder:
             self._node_ids.add(class_node.id)
             self._nodes.append(class_node)
             self._edges.append(make_contains_edge(file_id, class_node.id))
+
+            # Create method nodes as children of the class node.
+            # Node ID format: function:{file}:{method}  (same as top-level
+            # functions) so that call edges can reference methods by the
+            # same scheme regardless of whether the caller/callee is a
+            # top-level function or a method.
+            for method_name in cls.methods:
+                method_node = make_function_node(
+                    file_path,
+                    name=method_name,
+                    line_range=cls.line_range,  # fallback: class range
+                    summary=summaries.get(method_name, f"Method: {method_name}"),
+                    complexity=complexity,
+                )
+                if method_node.id in self._node_ids:
+                    logger.warning(
+                        '[GraphBuilder] Duplicate method node ID "%s" — skipping',
+                        method_node.id,
+                    )
+                    continue
+                self._node_ids.add(method_node.id)
+                self._nodes.append(method_node)
+                self._edges.append(
+                    make_contains_edge(class_node.id, method_node.id)
+                )
+
+        return file_id
 
     def add_import_edge(self, from_file: str, to_file: str) -> None:
         """Add an ``imports`` edge between two files (deduplicated).
@@ -484,6 +524,25 @@ class GraphBuilder:
                 f"file:{from_file}", f"file:{to_file}"
             )
         )
+
+    def add_import_edge_by_id(
+        self, source_id: str, target_id: str
+    ) -> None:
+        """Add an ``imports`` edge using raw node IDs (deduplicated).
+
+        Unlike ``add_import_edge`` which constructs IDs from file paths,
+        this method accepts the actual node IDs, allowing correct edges
+        for non-code files (``document:path``, ``config:path``, etc.).
+
+        Args:
+            source_id: Node ID of the importing file.
+            target_id: Node ID of the imported file.
+        """
+        key = f"imports|{source_id}|{target_id}"
+        if key in self._edge_keys:
+            return
+        self._edge_keys.add(key)
+        self._edges.append(make_imports_edge(source_id, target_id))
 
     def add_call_edge(
         self,
@@ -568,7 +627,7 @@ class GraphBuilder:
         endpoints: list[EndpointInfo] | None = None,
         steps: list[StepInfo] | None = None,
         resources: list[ResourceInfo] | None = None,
-    ) -> None:
+    ) -> str:
         """Register a non-code file with structured child nodes.
 
         Args:
@@ -582,6 +641,9 @@ class GraphBuilder:
             endpoints: API endpoint definitions.
             steps: Pipeline/CI step definitions.
             resources: Infrastructure resource definitions.
+
+        Returns:
+            The file node ID assigned to this non-code file.
         """
         file_id = self.add_non_code_file(
             file_path,
@@ -671,6 +733,8 @@ class GraphBuilder:
                 ),
                 parent_id=file_id,
             )
+
+        return file_id
 
     def build(self) -> KnowledgeGraph:
         """Assemble and return the final ``KnowledgeGraph``.

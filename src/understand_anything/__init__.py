@@ -37,6 +37,7 @@ from understand_anything.persistence import (
     save_meta,
     touch_meta,
 )
+from understand_anything.pipeline import Pipeline, PipelineResult
 from understand_anything.schema import (
     COMPLEXITY_ALIASES,
     DIRECTION_ALIASES,
@@ -127,6 +128,8 @@ __all__ = [
     "LanguageRegistry",
     "Layer",
     "NodeType",
+    "Pipeline",
+    "PipelineResult",
     "ProjectConfig",
     "ProjectMeta",
     "ReferenceResolution",

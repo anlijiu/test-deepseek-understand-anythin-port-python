@@ -108,8 +108,8 @@ class TestGraphBuilder:
 
         graph = builder.build()
 
-        # 1 file + 2 functions + 1 class = 4 nodes
-        assert len(graph.nodes) == 4
+        # 1 file + 2 functions + 1 class + 2 methods (get, set) = 6 nodes
+        assert len(graph.nodes) == 6
 
         file_node = next(n for n in graph.nodes if n.id == "file:src/service.ts")
         assert file_node.type == "file"

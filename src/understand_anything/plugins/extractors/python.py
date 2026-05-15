@@ -138,10 +138,12 @@ class PythonExtractor(LanguageExtractor):
 
             if inner.type == "function_definition":
                 self._extract_function(inner, functions)
+                self._extract_nested_functions(inner, functions)
                 self._add_export(inner, child, exports)
 
             elif inner.type == "class_definition":
                 self._extract_class(inner, classes)
+                self._extract_class_nested_functions(inner, functions)
                 self._add_export(inner, child, exports)
 
             elif inner.type == "import_statement":
@@ -230,6 +232,37 @@ class PythonExtractor(LanguageExtractor):
                 return_type=return_type,
             )
         )
+
+    def _extract_nested_functions(
+        self, node: Node, functions: list[FunctionInfo]
+    ) -> None:
+        """Extract nested function definitions inside *node*.
+
+        Nested functions can appear as call-graph callers. Creating function
+        nodes for them keeps Pipeline call edges referentially valid.
+        """
+        body = child_by_field_name(node, "body")
+        if body is None:
+            return
+
+        for child in body.children:
+            inner = _unwrap_decorated(child)
+            if inner.type == "function_definition":
+                self._extract_function(inner, functions)
+                self._extract_nested_functions(inner, functions)
+
+    def _extract_class_nested_functions(
+        self, node: Node, functions: list[FunctionInfo]
+    ) -> None:
+        """Extract functions nested inside class methods."""
+        body = child_by_field_name(node, "body")
+        if body is None:
+            return
+
+        for member in body.children:
+            inner_member = _unwrap_decorated(member)
+            if inner_member.type == "function_definition":
+                self._extract_nested_functions(inner_member, functions)
 
     # ------------------------------------------------------------------
     # Private helpers — class

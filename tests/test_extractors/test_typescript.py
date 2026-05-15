@@ -143,19 +143,20 @@ function complex(
         assert result.functions[0].line_range[0] == 2
         assert result.functions[0].line_range[1] == 8
 
-    def test_arrow_functions_in_lexical_declarations_not_extracted_as_functions(
+    def test_arrow_functions_in_lexical_declarations_are_extracted_as_functions(
         self, parse_typescript,
     ):
-        """Arrow functions assigned via const are not top-level functions."""
+        """Extract arrow functions assigned via const as named functions."""
         root = parse_typescript("""
 const multiply = (a: number, b: number): number => a * b;
 """)
         extractor = TypeScriptExtractor()
         result = extractor.extract_structure(root)
 
-        # Arrow functions in const are NOT extracted as functions by
-        # _walk_program — they are not function_declaration nodes.
-        assert len(result.functions) == 0
+        assert len(result.functions) == 1
+        assert result.functions[0].name == "multiply"
+        assert result.functions[0].params == ["a", "b"]
+        assert result.functions[0].return_type == "number"
 
     def test_destructured_parameters(self, parse_typescript):
         """Extract destructured parameter names from functions.
