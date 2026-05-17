@@ -12,19 +12,27 @@ from understand_anything.plugins.extractors.base import (
     child_by_field_name,
     find_child,
     find_children,
+    get_node_text,
 )
 from understand_anything.plugins.extractors.types import LanguageExtractor
 from understand_anything.types import (
     CallGraphEntry,
     ClassInfo,
+    EnumInfo,
     ExportInfo,
     FunctionInfo,
     ImportInfo,
+    InheritanceInfo,
+    InterfaceInfo,
+    MethodInfo,
     StructuralAnalysis,
+    VariableInfo,
 )
 
 if TYPE_CHECKING:
     from tree_sitter import Node
+
+    from understand_anything.types import TypeAliasInfo
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +139,10 @@ class PythonExtractor(LanguageExtractor):
         classes: list[ClassInfo] = []
         imports: list[ImportInfo] = []
         exports: list[ExportInfo] = []
+        variables: list[VariableInfo] = []
+        enums: list[EnumInfo] = []
+        interfaces: list[InterfaceInfo] = []
+        type_aliases: list[TypeAliasInfo] = []
 
         for child in root_node.children:
             # Unwrap decorated definitions to get the inner node
@@ -142,7 +154,9 @@ class PythonExtractor(LanguageExtractor):
                 self._add_export(inner, child, exports)
 
             elif inner.type == "class_definition":
-                self._extract_class(inner, classes)
+                self._classify_and_extract(
+                    inner, classes, functions, exports, enums, interfaces
+                )
                 self._extract_class_nested_functions(inner, functions)
                 self._add_export(inner, child, exports)
 
@@ -152,11 +166,20 @@ class PythonExtractor(LanguageExtractor):
             elif inner.type == "import_from_statement":
                 self._extract_from_import(inner, imports)
 
+        # Extract top-level variables and type aliases from the module body
+        self._extract_top_level_assignments(
+            root_node, variables, type_aliases
+        )
+
         return StructuralAnalysis(
             functions=functions,
             classes=classes,
             imports=imports,
             exports=exports,
+            variables=variables,
+            enums=enums,
+            interfaces=interfaces,
+            type_aliases=type_aliases,
         )
 
     # ------------------------------------------------------------------
@@ -270,13 +293,19 @@ class PythonExtractor(LanguageExtractor):
 
     def _extract_class(
         self, node: Node, classes: list[ClassInfo]
-    ) -> None:
-        """Extract class info from a class_definition node."""
+    ) -> ClassInfo:
+        """Extract class info from a class_definition node.
+
+        Returns the ClassInfo so callers can inspect/modify it.
+        """
         name_node = child_by_field_name(node, "name")
         if name_node is None or name_node.text is None:
-            return
+            return ClassInfo(
+                name="<unknown>",
+                line_range=(node.start_point[0] + 1, node.end_point[0] + 1),
+            )
 
-        methods: list[str] = []
+        method_details: list[MethodInfo] = []
         properties: list[str] = []
 
         body = child_by_field_name(node, "body")
@@ -291,15 +320,28 @@ class PythonExtractor(LanguageExtractor):
                 if inner_member.type == "function_definition":
                     method_name = child_by_field_name(inner_member, "name")
                     if method_name is not None and method_name.text is not None:
-                        methods.append(method_name.text.decode("utf-8"))
+                        name = method_name.text.decode("utf-8")
+                        params_node = child_by_field_name(
+                            inner_member, "parameters"
+                        )
+                        params = _extract_params(params_node)
+                        return_type = _extract_return_type(inner_member)
+                        method_details.append(
+                            MethodInfo(
+                                name=name,
+                                line_range=(
+                                    inner_member.start_point[0] + 1,
+                                    inner_member.end_point[0] + 1,
+                                ),
+                                params=params,
+                                return_type=return_type,
+                            )
+                        )
 
                 # Properties: type-annotated assignments at class body level
-                # e.g., ``name: str`` or ``value: int = 0``
                 if member.type == "expression_statement":
                     assignment = find_child(member, "assignment")
                     if assignment is not None:
-                        # Check if this is a type-annotated class-level
-                        # assignment (has a ``type`` child)
                         type_node = find_child(assignment, "type")
                         name_ident = find_child(assignment, "identifier")
                         if type_node is not None and name_ident is not None:
@@ -309,18 +351,142 @@ class PythonExtractor(LanguageExtractor):
                                 else "<unknown>"
                             )
 
-        classes.append(
-            ClassInfo(
-                name=name_node.text.decode("utf-8"),
-                line_range=(node.start_point[0] + 1, node.end_point[0] + 1),
-                methods=methods,
-                properties=properties,
-            )
-        )
+        # Detect inheritance from base classes in argument list
+        inheritance = self._extract_inheritance(node)
 
-    # ------------------------------------------------------------------
-    # Private helpers — imports
-    # ------------------------------------------------------------------
+        cinfo = ClassInfo(
+            name=name_node.text.decode("utf-8"),
+            line_range=(node.start_point[0] + 1, node.end_point[0] + 1),
+            methods=[m.name for m in method_details],
+            properties=properties,
+            inheritance=inheritance,
+            method_details=method_details,
+        )
+        classes.append(cinfo)
+        return cinfo
+
+    @staticmethod
+    def _extract_inheritance(node: Node) -> InheritanceInfo | None:
+        """Extract inheritance info from a class_definition."""
+        extends: list[str] = []
+        implements: list[str] = []
+
+        # Python class bases are in the argument list: class Foo(Base1, Base2)
+        arg_list = find_child(node, "argument_list")
+        if arg_list is not None:
+            for child in arg_list.children:
+                if child.type == "identifier" and child.text:
+                    name = child.text.decode("utf-8")
+                    # Heuristic: "Protocol" or names ending with "Protocol"
+                    # indicate interface-like base classes
+                    if name.lower() in ("protocol", "abc") or name.endswith(
+                        "Protocol"
+                    ):
+                        implements.append(name)
+                    else:
+                        extends.append(name)
+                elif child.type == "attribute" and child.text:
+                    extends.append(child.text.decode("utf-8"))
+
+        if extends or implements:
+            return InheritanceInfo(extends=extends, implements=implements)
+        return None
+
+    def _classify_and_extract(
+        self,
+        node: Node,
+        classes: list[ClassInfo],
+        functions: list[FunctionInfo],
+        exports: list[ExportInfo],
+        enums: list[EnumInfo],
+        interfaces: list[InterfaceInfo],
+    ) -> None:
+        """Extract a class and classify as enum/interface/protocol if applicable.
+
+        检查基类名称来判断是否为特殊类型 (Enum, Protocol 等)。
+        """
+        cinfo = self._extract_class(node, classes)
+
+        # Check if this class extends Enum
+        if cinfo.inheritance:
+            for base in cinfo.inheritance.extends:
+                if base.lower() in ("enum", "intenum", "strnum"):
+                    enums.append(
+                        EnumInfo(
+                            name=cinfo.name,
+                            line_range=cinfo.line_range,
+                            values=list(cinfo.properties),
+                            methods=list(cinfo.method_details),
+                        )
+                    )
+                    return
+                if base.lower() == "protocol" or base.endswith("Protocol"):
+                    interfaces.append(
+                        InterfaceInfo(
+                            name=cinfo.name,
+                            line_range=cinfo.line_range,
+                            methods=list(cinfo.method_details),
+                            properties=list(cinfo.properties),
+                            extends=list(cinfo.inheritance.extends),
+                        )
+                    )
+                    return
+
+    def _extract_top_level_assignments(
+        self,
+        root_node: Node,
+        variables: list[VariableInfo],
+        type_aliases: list[TypeAliasInfo],
+    ) -> None:
+        """Extract top-level variable assignments and type aliases.
+
+        Detects:
+          - Plain assignments: ``DEBUG = True`` → VariableInfo
+          - Type-annotated assignments: ``name: str = "hello"`` → VariableInfo
+          - Type alias-style annotated assignments → TypeAliasInfo
+        """
+        for child in root_node.children:
+            if child.type != "expression_statement":
+                continue
+
+            assignment = find_child(child, "assignment")
+            if assignment is None:
+                continue
+
+            name_ident = find_child(assignment, "identifier")
+            if name_ident is None or name_ident.text is None:
+                continue
+
+            name = name_ident.text.decode("utf-8")
+            if name.startswith("_"):
+                continue  # skip private/internal
+
+            line_range = (
+                child.start_point[0] + 1,
+                child.end_point[0] + 1,
+            )
+
+            type_node = find_child(assignment, "type")
+            if type_node is not None:
+                # Type-annotated: could be variable or type alias
+                type_text = get_node_text(type_node)
+                variables.append(
+                    VariableInfo(
+                        name=name,
+                        line_range=line_range,
+                        type_annotation=type_text,
+                    )
+                )
+            else:
+                right_node = find_child(assignment, "type")
+                if right_node is None:
+                    # Simple assignment: variable
+                    variables.append(
+                        VariableInfo(
+                            name=name,
+                            line_range=line_range,
+                        )
+                    )
 
     def _extract_import(
         self, node: Node, imports: list[ImportInfo]

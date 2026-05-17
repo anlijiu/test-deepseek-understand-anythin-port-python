@@ -172,3 +172,58 @@ def collect_nodes_of_type(node: Node, type_name: str) -> list[Node]:
 
     traverse(node, _collect)
     return result
+
+
+def collect_named_children(node: Node) -> list[Node]:
+    """Collect all named children of *node* that have a ``name`` field.
+
+    Returns nodes with a resolvable ``child_by_field_name("name")`` value.
+    Useful for extracting methods, properties, and other named members
+    from class/interface/struct bodies.
+
+    Args:
+        node: The parent AST node (e.g., ``class_body``, ``interface_body``).
+
+    Returns:
+        List of named child nodes with resolvable names.
+    """
+    result: list[Node] = []
+    for child in node.children:
+        if not child.is_named:
+            continue
+        name_node = child_by_field_name(child, "name")
+        if name_node is not None:
+            result.append(child)
+    return result
+
+
+def get_signature(node: Node) -> str:
+    """Reconstruct a human-readable signature from a function/method AST node.
+
+    Extracts name, parameters, and return type into a string like
+    ``"foo(a: int, b: str) -> bool"``.  Works across languages as long
+    as the node has ``name`` and ``parameters`` fields.
+
+    Args:
+        node: A function/method definition AST node.
+
+    Returns:
+        A reconstructed signature string, or ``""`` if no name is found.
+    """
+    name_node = child_by_field_name(node, "name")
+    if name_node is None or name_node.text is None:
+        return ""
+
+    name = name_node.text.decode("utf-8")
+
+    params_node = child_by_field_name(node, "parameters")
+    params_text = ""
+    if params_node is not None and params_node.text is not None:
+        params_text = params_node.text.decode("utf-8")
+
+    ret_type_node = child_by_field_name(node, "return_type")
+    ret_text = ""
+    if ret_type_node is not None and ret_type_node.text is not None:
+        ret_text = f" -> {ret_type_node.text.decode('utf-8')}"
+
+    return f"{name}({params_text}){ret_text}"

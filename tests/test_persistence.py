@@ -552,3 +552,181 @@ class TestClearAll:
     def test_clear_all_missing_dir(self, project_root: Path) -> None:
         # Should not raise
         clear_all(project_root)
+
+
+# ---------------------------------------------------------------------------
+# SQLite backend
+# ---------------------------------------------------------------------------
+
+
+class TestSqliteBackend:
+    """验证 ``SqliteBackend.save_graph`` 正确处理各类图数据."""
+
+    def test_save_interface_extends_no_dangling_edges(
+        self, tmp_path: Path
+    ) -> None:
+        """接口 extends 边不应产生 dangling edge (跨文件解析后目标节点存在)."""
+        from understand_anything.persistence.sqlite_backend import (
+            SqliteBackend,
+        )
+
+        root = tmp_path / "test_iface_extends"
+        root.mkdir(parents=True)
+
+        # 构建图: 两个文件, 各有一个接口, 其中一个 extends 另一个
+        # file_a.ts: interface Base { ... }
+        # file_b.ts: interface Child extends Base { ... }
+        nodes = [
+            GraphNode(
+                id="file:src/a.ts",
+                name="a.ts",
+                type="file",
+                filePath="src/a.ts",
+                summary="File A",
+                complexity="simple",
+            ),
+            GraphNode(
+                id="interface:src/a.ts:Base",
+                name="Base",
+                type="interface",
+                filePath="src/a.ts",
+                summary="Base interface",
+                complexity="simple",
+            ),
+            GraphNode(
+                id="file:src/b.ts",
+                name="b.ts",
+                type="file",
+                filePath="src/b.ts",
+                summary="File B",
+                complexity="simple",
+            ),
+            GraphNode(
+                id="interface:src/b.ts:Child",
+                name="Child",
+                type="interface",
+                filePath="src/b.ts",
+                summary="Child interface",
+                complexity="simple",
+            ),
+        ]
+        edges = [
+            GraphEdge(
+                source="file:src/a.ts",
+                target="interface:src/a.ts:Base",
+                type="contains",
+                direction="forward",
+                weight=1.0,
+            ),
+            GraphEdge(
+                source="file:src/b.ts",
+                target="interface:src/b.ts:Child",
+                type="contains",
+                direction="forward",
+                weight=1.0,
+            ),
+            # Child extends Base — 目标节点 interface:src/a.ts:Base 存在
+            GraphEdge(
+                source="interface:src/b.ts:Child",
+                target="interface:src/a.ts:Base",
+                type="inherits",
+                direction="forward",
+                weight=0.9,
+            ),
+        ]
+
+        graph = KnowledgeGraph(
+            version="1.0.0",
+            project=ProjectMeta(
+                name="test-iface-extends",
+                languages=["typescript"],
+                frameworks=[],
+                description="",
+                analyzedAt="2025-01-01T00:00:00Z",
+                gitCommitHash="abc",
+            ),
+            nodes=nodes,
+            edges=edges,
+            layers=[],
+            tour=[],
+        )
+
+        backend = SqliteBackend(root)
+        try:
+            count = backend.save_graph(graph)
+            # 应该写入 4 个节点
+            assert count == 4
+            # 验证数据可读
+            assert backend.queries.count_nodes() == 4
+            assert backend.queries.count_edges() == 3
+        finally:
+            backend.close()
+
+    def test_unresolved_extends_no_dangling_edge(
+        self, tmp_path: Path
+    ) -> None:
+        """未解析的 extends 不应产生 dangling edge (目标节点不存在时跳过)."""
+        from understand_anything.persistence.sqlite_backend import (
+            SqliteBackend,
+        )
+
+        root = tmp_path / "test_unresolved_extends"
+        root.mkdir(parents=True)
+
+        # 只有 Child 接口, Base 在同一文件且不存在节点
+        # 模拟 resolve_inheritance_edges 已跳过未解析边的结果
+        nodes = [
+            GraphNode(
+                id="file:src/b.ts",
+                name="b.ts",
+                type="file",
+                filePath="src/b.ts",
+                summary="File B",
+                complexity="simple",
+            ),
+            GraphNode(
+                id="interface:src/b.ts:Child",
+                name="Child",
+                type="interface",
+                filePath="src/b.ts",
+                summary="Child interface",
+                complexity="simple",
+            ),
+        ]
+        edges = [
+            GraphEdge(
+                source="file:src/b.ts",
+                target="interface:src/b.ts:Child",
+                type="contains",
+                direction="forward",
+                weight=1.0,
+            ),
+            # 没有 extends 边, 因为 Base 不存在于任何已分析文件中
+        ]
+
+        graph = KnowledgeGraph(
+            version="1.0.0",
+            project=ProjectMeta(
+                name="test-unresolved",
+                languages=["typescript"],
+                frameworks=[],
+                description="",
+                analyzedAt="2025-01-01T00:00:00Z",
+                gitCommitHash="abc",
+            ),
+            nodes=nodes,
+            edges=edges,
+            layers=[],
+            tour=[],
+        )
+
+        backend = SqliteBackend(root)
+        try:
+            count = backend.save_graph(graph)
+            assert count == 2
+            assert backend.queries.count_edges() == 1
+            # 确认没有 inherits 边
+            inherits_edges = backend.queries.get_edges_by_type("inherits")
+            assert len(inherits_edges) == 0
+        finally:
+            backend.close()

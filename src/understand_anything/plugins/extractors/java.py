@@ -27,9 +27,13 @@ from understand_anything.plugins.extractors.types import LanguageExtractor
 from understand_anything.types import (
     CallGraphEntry,
     ClassInfo,
+    EnumInfo,
     ExportInfo,
     FunctionInfo,
     ImportInfo,
+    InheritanceInfo,
+    InterfaceInfo,
+    MethodInfo,
     StructuralAnalysis,
 )
 
@@ -60,6 +64,12 @@ _VARIABLE_DECLARATOR = "variable_declarator"
 _IDENTIFIER = "identifier"
 _CLASS_BODY = "class_body"
 _INTERFACE_BODY = "interface_body"
+_ENUM_DECLARATION = "enum_declaration"
+_ENUM_BODY = "enum_body"
+_ENUM_CONSTANT = "enum_constant"
+_SUPERCLASS = "superclass"
+_SUPER_INTERFACES = "super_interfaces"
+_TYPE_LIST = "type_list"
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +140,8 @@ class JavaExtractor(LanguageExtractor):
         classes: list[ClassInfo] = []
         imports: list[ImportInfo] = []
         exports: list[ExportInfo] = []
+        enums: list[EnumInfo] = []
+        interfaces: list[InterfaceInfo] = []
 
         for node in root_node.children:
             if node.type == _IMPORT_DECLARATION:
@@ -137,32 +149,111 @@ class JavaExtractor(LanguageExtractor):
             elif node.type == _CLASS_DECLARATION:
                 self._extract_class(node, functions, classes, exports)
             elif node.type == _INTERFACE_DECLARATION:
-                self._extract_interface(node, functions, classes, exports)
+                self._extract_interface(node, functions, interfaces, exports)
+            elif node.type == _ENUM_DECLARATION:
+                self._extract_enum_def(node, enums, exports)
 
         return StructuralAnalysis(
             functions=functions,
             classes=classes,
             imports=imports,
             exports=exports,
+            enums=enums,
+            interfaces=interfaces,
         )
+
+    # ------------------------------------------------------------------
+    # Internal: enum extraction
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _extract_enum_def(
+        node: Node,
+        enums: list[EnumInfo],
+        exports: list[ExportInfo],
+    ) -> None:
+        """Extract an enum_declaration into the enums list."""
+        name_node = node.child_by_field_name("name")
+        if name_node is None:
+            return
+
+        enum_name = get_node_text(name_node)
+        values: list[str] = []
+        method_list: list[MethodInfo] = []
+
+        body = node.child_by_field_name("body")
+        if body is not None:
+            for child in body.children:
+                if child.type == _ENUM_CONSTANT:
+                    const_name = find_child(child, _IDENTIFIER)
+                    if const_name:
+                        values.append(get_node_text(const_name))
+                elif child.type == _METHOD_DECLARATION:
+                    meth_name_node = child.child_by_field_name("name")
+                    if meth_name_node:
+                        m_name = get_node_text(meth_name_node)
+                        params_node = child.child_by_field_name("parameters")
+                        method_list.append(
+                            MethodInfo(
+                                name=m_name,
+                                line_range=(
+                                    child.start_point[0] + 1,
+                                    child.end_point[0] + 1,
+                                ),
+                                params=_extract_params(params_node),
+                                return_type=_extract_return_type(child),
+                            )
+                        )
+
+        enums.append(
+            EnumInfo(
+                name=enum_name,
+                line_range=(
+                    node.start_point[0] + 1,
+                    node.end_point[0] + 1,
+                ),
+                values=values,
+                methods=method_list,
+            )
+        )
+
+        if _has_modifier(node, "public"):
+            exports.append(
+                ExportInfo(
+                    name=enum_name,
+                    line_number=node.start_point[0] + 1,
+                )
+            )
 
     # ------------------------------------------------------------------
     # Call graph extraction
     # ------------------------------------------------------------------
 
     def extract_call_graph(self, root_node: Node) -> list[CallGraphEntry]:
+        """从 AST 中提取调用图（迭代遍历，避免深层嵌套栈溢出）."""
         entries: list[CallGraphEntry] = []
         function_stack: list[str] = []
 
-        def _walk_for_calls(node: Node) -> None:
-            pushed_name = False
+        # 显式栈：Node 表示待处理的节点，str 表示弹出 function_stack 的哨兵
+        stack: list[Node | str] = [root_node]
+
+        while stack:
+            item = stack.pop()
+
+            if isinstance(item, str):
+                # 哨兵：离开函数作用域
+                function_stack.pop()
+                continue
+
+            node = item
+            pushed = False
 
             # Track entering method/constructor declarations
             if node.type in (_METHOD_DECLARATION, _CONSTRUCTOR_DECLARATION):
                 name_node = node.child_by_field_name("name")
                 if name_node is not None:
                     function_stack.append(get_node_text(name_node))
-                    pushed_name = True
+                    pushed = True
 
             # Extract method invocations: e.g. fetchFromDb(limit), System.out.println(msg)
             if node.type == _METHOD_INVOCATION and function_stack:
@@ -188,13 +279,13 @@ class JavaExtractor(LanguageExtractor):
                         )
                     )
 
-            for child in node.children:
-                _walk_for_calls(child)
+            # 先压入哨兵（在此节点的所有子节点处理完后弹出 function_stack）
+            if pushed:
+                stack.append("__FUNC_END__")
 
-            if pushed_name:
-                function_stack.pop()
+            # 子节点逆序入栈
+            stack.extend(reversed(node.children))
 
-        _walk_for_calls(root_node)
         return entries
 
     # ------------------------------------------------------------------
@@ -274,14 +365,17 @@ class JavaExtractor(LanguageExtractor):
         if name_node is None:
             return
 
-        methods: list[str] = []
+        method_details: list[MethodInfo] = []
         properties: list[str] = []
 
         body = node.child_by_field_name("body")
         if body is not None:
             _extract_class_body_members(
-                body, methods, properties, functions, exports
+                body, method_details, properties, functions, exports
             )
+
+        # Detect inheritance
+        inheritance = _extract_java_inheritance(node)
 
         classes.append(
             ClassInfo(
@@ -290,8 +384,10 @@ class JavaExtractor(LanguageExtractor):
                     node.start_point[0] + 1,
                     node.end_point[0] + 1,
                 ),
-                methods=methods,
+                methods=[m.name for m in method_details],
                 properties=properties,
+                inheritance=inheritance,
+                method_details=method_details,
             )
         )
 
@@ -311,15 +407,15 @@ class JavaExtractor(LanguageExtractor):
     def _extract_interface(
         node: Node,
         functions: list[FunctionInfo],
-        classes: list[ClassInfo],
+        interfaces: list[InterfaceInfo],
         exports: list[ExportInfo],
     ) -> None:
-        """Extract an interface_declaration into the classes array."""
+        """Extract an interface_declaration into the interfaces list."""
         name_node = node.child_by_field_name("name")
         if name_node is None:
             return
 
-        methods: list[str] = []
+        method_details: list[MethodInfo] = []
         properties: list[str] = []
 
         body = node.child_by_field_name("body")
@@ -328,7 +424,21 @@ class JavaExtractor(LanguageExtractor):
             for method_node in find_children(body, _METHOD_DECLARATION):
                 meth_name_node = method_node.child_by_field_name("name")
                 if meth_name_node is not None:
-                    methods.append(get_node_text(meth_name_node))
+                    m_name = get_node_text(meth_name_node)
+                    params_node = method_node.child_by_field_name("parameters")
+                    params = _extract_params(params_node)
+                    return_type = _extract_return_type(method_node)
+                    method_details.append(
+                        MethodInfo(
+                            name=m_name,
+                            line_range=(
+                                method_node.start_point[0] + 1,
+                                method_node.end_point[0] + 1,
+                            ),
+                            params=params,
+                            return_type=return_type,
+                        )
+                    )
 
             # Interface can also contain constant_declaration (fields)
             for field in find_children(body, _CONSTANT_DECLARATION):
@@ -337,15 +447,19 @@ class JavaExtractor(LanguageExtractor):
                     if decl_name is not None:
                         properties.append(get_node_text(decl_name))
 
-        classes.append(
-            ClassInfo(
+        # Detect super interfaces
+        extends: list[str] = _extract_java_super_interfaces(node)
+
+        interfaces.append(
+            InterfaceInfo(
                 name=get_node_text(name_node),
                 line_range=(
                     node.start_point[0] + 1,
                     node.end_point[0] + 1,
                 ),
-                methods=methods,
+                methods=method_details,
                 properties=properties,
+                extends=extends,
             )
         )
 
@@ -365,7 +479,7 @@ class JavaExtractor(LanguageExtractor):
 
 def _extract_class_body_members(
     body: Node,
-    methods: list[str],
+    method_details: list[MethodInfo],
     properties: list[str],
     functions: list[FunctionInfo],
     exports: list[ExportInfo],
@@ -373,16 +487,16 @@ def _extract_class_body_members(
     """Extract methods, constructors, and fields from a class_body node."""
     for child in body.children:
         if child.type == _METHOD_DECLARATION:
-            _extract_method(child, methods, functions, exports)
+            _extract_method(child, method_details, functions, exports)
         elif child.type == _CONSTRUCTOR_DECLARATION:
-            _extract_constructor(child, methods, functions, exports)
+            _extract_constructor(child, method_details, functions, exports)
         elif child.type == _FIELD_DECLARATION:
             _extract_field(child, properties, exports)
 
 
 def _extract_method(
     node: Node,
-    methods: list[str],
+    method_details: list[MethodInfo],
     functions: list[FunctionInfo],
     exports: list[ExportInfo],
 ) -> None:
@@ -396,7 +510,27 @@ def _extract_method(
     params = _extract_params(params_node)
     return_type = _extract_return_type(node)
 
-    methods.append(name)
+    is_static = _has_modifier(node, "static")
+    if _has_modifier(node, "private"):
+        visibility = "private"
+    elif _has_modifier(node, "protected"):
+        visibility = "protected"
+    else:
+        visibility = "public"
+
+    method_details.append(
+        MethodInfo(
+            name=name,
+            line_range=(
+                node.start_point[0] + 1,
+                node.end_point[0] + 1,
+            ),
+            params=params,
+            return_type=return_type,
+            is_static=is_static,
+            visibility=visibility,
+        )
+    )
 
     functions.append(
         FunctionInfo(
@@ -421,7 +555,7 @@ def _extract_method(
 
 def _extract_constructor(
     node: Node,
-    methods: list[str],
+    method_details: list[MethodInfo],
     functions: list[FunctionInfo],
     exports: list[ExportInfo],
 ) -> None:
@@ -434,7 +568,17 @@ def _extract_constructor(
     params_node = node.child_by_field_name("parameters")
     params = _extract_params(params_node)
 
-    methods.append(name)
+    method_details.append(
+        MethodInfo(
+            name=name,
+            line_range=(
+                node.start_point[0] + 1,
+                node.end_point[0] + 1,
+            ),
+            params=params,
+            is_constructor=True,
+        )
+    )
 
     functions.append(
         FunctionInfo(
@@ -475,3 +619,54 @@ def _extract_field(
                         line_number=node.start_point[0] + 1,
                     )
                 )
+
+
+def _extract_java_inheritance(node: Node) -> InheritanceInfo | None:
+    """Extract extends and implements from a Java class_declaration."""
+    extends: list[str] = []
+    implements: list[str] = []
+
+    superclass = find_child(node, _SUPERCLASS)
+    if superclass is not None:
+        ident = find_child(superclass, _IDENTIFIER)
+        if ident:
+            extends.append(get_node_text(ident))
+        # Could be a type_identifier or scoped_identifier
+        scoped = find_child(superclass, _SCOPED_IDENTIFIER)
+        if scoped:
+            extends.append(get_node_text(scoped))
+
+    super_ifaces = find_child(node, _SUPER_INTERFACES)
+    if super_ifaces is not None:
+        type_list = find_child(super_ifaces, _TYPE_LIST)
+        if type_list is not None:
+            implements.extend(
+                get_node_text(n)
+                for n in find_children(type_list, _IDENTIFIER)
+            )
+            implements.extend(
+                get_node_text(s)
+                for s in find_children(type_list, _SCOPED_IDENTIFIER)
+            )
+
+    if extends or implements:
+        return InheritanceInfo(extends=extends, implements=implements)
+    return None
+
+
+def _extract_java_super_interfaces(node: Node) -> list[str]:
+    """Extract super interface names from an interface_declaration."""
+    result: list[str] = []
+    extends_clause = find_child(node, "extends_interfaces")
+    if extends_clause is not None:
+        type_list = find_child(extends_clause, _TYPE_LIST)
+        if type_list is not None:
+            result.extend(
+                get_node_text(n)
+                for n in find_children(type_list, _IDENTIFIER)
+            )
+            result.extend(
+                get_node_text(s)
+                for s in find_children(type_list, _SCOPED_IDENTIFIER)
+            )
+    return result

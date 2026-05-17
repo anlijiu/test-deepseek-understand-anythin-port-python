@@ -75,15 +75,19 @@ from understand_anything.types import (
     # Enums
     EdgeType,
     EndpointInfo,
+    EnumInfo,
     ExportInfo,
     FunctionInfo,
     GraphEdge,
     GraphNode,
     ImportInfo,
     ImportResolution,
+    InheritanceInfo,
+    InterfaceInfo,
     KnowledgeGraph,
     KnowledgeMeta,
     Layer,
+    MethodInfo,
     NodeType,
     ProjectConfig,
     ProjectMeta,
@@ -95,6 +99,8 @@ from understand_anything.types import (
     StructuralAnalysis,
     ThemeConfig,
     TourStep,
+    TypeAliasInfo,
+    VariableInfo,
 )
 
 __all__ = [

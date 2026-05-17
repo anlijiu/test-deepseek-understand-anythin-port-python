@@ -15,6 +15,7 @@ from understand_anything.types import (
     GraphEdge,
     GraphNode,
     KnowledgeGraph,
+    MethodInfo,
     NodeType,
     ProjectMeta,
 )
@@ -87,6 +88,10 @@ _STR_TO_NODE_TYPE: dict[str, NodeType] = {
     "topic": NodeType.TOPIC,
     "claim": NodeType.CLAIM,
     "source": NodeType.SOURCE,
+    "variable": NodeType.VARIABLE,
+    "enum": NodeType.ENUM,
+    "interface": NodeType.INTERFACE,
+    "type_alias": NodeType.TYPE_ALIAS,
 }
 
 # ---------------------------------------------------------------------------
@@ -295,6 +300,235 @@ def make_calls_edge(
     )
 
 
+def make_extends_edge(
+    class_id: str, parent_id: str
+) -> GraphEdge:
+    """Create an ``inherits`` edge for class inheritance (extends)."""
+    return GraphEdge(
+        source=class_id,
+        target=parent_id,
+        type=EdgeType.INHERITS,
+        direction="forward",
+        weight=0.9,
+    )
+
+
+def make_implements_edge(
+    class_id: str, iface_id: str
+) -> GraphEdge:
+    """Create an ``implements`` edge from class to interface."""
+    return GraphEdge(
+        source=class_id,
+        target=iface_id,
+        type=EdgeType.IMPLEMENTS,
+        direction="forward",
+        weight=0.9,
+    )
+
+
+def make_exports_edge(
+    source_id: str, target_id: str
+) -> GraphEdge:
+    """Create an ``exports`` edge between a module and its exported symbol."""
+    return GraphEdge(
+        source=source_id,
+        target=target_id,
+        type=EdgeType.EXPORTS,
+        direction="forward",
+        weight=0.6,
+    )
+
+
+def make_references_edge(
+    source_id: str, target_id: str
+) -> GraphEdge:
+    """Create a ``references`` edge for general symbol references."""
+    return GraphEdge(
+        source=source_id,
+        target=target_id,
+        type=EdgeType.REFERENCES,
+        direction="forward",
+        weight=0.5,
+    )
+
+
+def make_type_of_edge(
+    symbol_id: str, type_id: str
+) -> GraphEdge:
+    """Create a ``type_of`` edge from a variable to its type definition."""
+    return GraphEdge(
+        source=symbol_id,
+        target=type_id,
+        type=EdgeType.TYPE_OF,
+        direction="forward",
+        weight=0.7,
+    )
+
+
+def make_overrides_edge(
+    method_id: str, parent_method_id: str
+) -> GraphEdge:
+    """Create an ``overrides`` edge for method overriding."""
+    return GraphEdge(
+        source=method_id,
+        target=parent_method_id,
+        type=EdgeType.OVERRIDES,
+        direction="forward",
+        weight=0.8,
+    )
+
+
+def make_decorates_edge(
+    decorator_id: str, target_id: str
+) -> GraphEdge:
+    """Create a ``decorates`` edge from a decorator to its target."""
+    return GraphEdge(
+        source=decorator_id,
+        target=target_id,
+        type=EdgeType.DECORATES,
+        direction="forward",
+        weight=0.6,
+    )
+
+
+def make_instantiates_edge(
+    source_id: str, class_id: str
+) -> GraphEdge:
+    """Create an ``instantiates`` edge for ``new`` expressions."""
+    return GraphEdge(
+        source=source_id,
+        target=class_id,
+        type=EdgeType.INSTANTIATES,
+        direction="forward",
+        weight=0.7,
+    )
+
+
+def make_returns_edge(
+    function_id: str, type_id: str
+) -> GraphEdge:
+    """Create a ``returns`` edge from a function to its return type."""
+    return GraphEdge(
+        source=function_id,
+        target=type_id,
+        type=EdgeType.RETURNS,
+        direction="forward",
+        weight=0.5,
+    )
+
+
+def make_variable_node(
+    file_path: str,
+    name: str,
+    line_range: tuple[int, int],
+    summary: str,
+    complexity: str,
+) -> GraphNode:
+    """Create a variable-type ``GraphNode``.
+
+    Args:
+        file_path: Path to the containing source file.
+        name: Variable name.
+        line_range: Start/end line numbers (1-based, inclusive).
+        summary: One-sentence summary.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+    """
+    return GraphNode(
+        id=f"variable:{file_path}:{name}",
+        type=NodeType.VARIABLE,
+        name=name,
+        filePath=file_path,
+        lineRange=line_range,
+        summary=summary,
+        tags=[],
+        complexity=cast("Complexity", complexity),
+    )
+
+
+def make_enum_node(
+    file_path: str,
+    name: str,
+    line_range: tuple[int, int],
+    summary: str,
+    complexity: str,
+) -> GraphNode:
+    """Create an enum-type ``GraphNode``.
+
+    Args:
+        file_path: Path to the containing source file.
+        name: Enum name.
+        line_range: Start/end line numbers (1-based, inclusive).
+        summary: One-sentence summary.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+    """
+    return GraphNode(
+        id=f"enum:{file_path}:{name}",
+        type=NodeType.ENUM,
+        name=name,
+        filePath=file_path,
+        lineRange=line_range,
+        summary=summary,
+        tags=[],
+        complexity=cast("Complexity", complexity),
+    )
+
+
+def make_interface_node(
+    file_path: str,
+    name: str,
+    line_range: tuple[int, int],
+    summary: str,
+    complexity: str,
+) -> GraphNode:
+    """Create an interface-type ``GraphNode``.
+
+    Args:
+        file_path: Path to the containing source file.
+        name: Interface name.
+        line_range: Start/end line numbers (1-based, inclusive).
+        summary: One-sentence summary.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+    """
+    return GraphNode(
+        id=f"interface:{file_path}:{name}",
+        type=NodeType.INTERFACE,
+        name=name,
+        filePath=file_path,
+        lineRange=line_range,
+        summary=summary,
+        tags=[],
+        complexity=cast("Complexity", complexity),
+    )
+
+
+def make_type_alias_node(
+    file_path: str,
+    name: str,
+    line_range: tuple[int, int],
+    summary: str,
+    complexity: str,
+) -> GraphNode:
+    """Create a type_alias-type ``GraphNode``.
+
+    Args:
+        file_path: Path to the containing source file.
+        name: Type alias name.
+        line_range: Start/end line numbers (1-based, inclusive).
+        summary: One-sentence summary.
+        complexity: One of ``"simple"``, ``"moderate"``, ``"complex"``.
+    """
+    return GraphNode(
+        id=f"type_alias:{file_path}:{name}",
+        type=NodeType.TYPE_ALIAS,
+        name=name,
+        filePath=file_path,
+        lineRange=line_range,
+        summary=summary,
+        tags=[],
+        complexity=cast("Complexity", complexity),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -374,9 +608,76 @@ class GraphBuilder:
         self._languages: set[str] = set()
         self._node_ids: set[str] = set()
         self._edge_keys: set[str] = set()
+        self._detected_frameworks: list[str] = []
+        # 延迟解析的继承/实现边: (source_node_id, parent_name, edge_type)
+        # source_node_id 可以是 class: 或 interface: 前缀
+        # edge_type ∈ {"extends", "implements"}
+        self._deferred_inheritance: list[tuple[str, str, str]] = []
+
+    def set_frameworks(self, frameworks: list[str]) -> None:
+        """设置检测到的框架列表 (在 build() 前调用).
+
+        Args:
+            frameworks: 框架名称列表 (e.g. ``["react", "django"]``).
+        """
+        self._detected_frameworks = list(frameworks)
 
     # ------------------------------------------------------------------
-    # Public API
+    # 公共节点/边 API (供 framework resolver 等外部调用方使用)
+    # ------------------------------------------------------------------
+
+    def has_node(self, node_id: str) -> bool:
+        """检查节点 ID 是否已注册.
+
+        Args:
+            node_id: 节点 ID.
+
+        Returns:
+            ``True`` 如果节点已存在.
+        """
+        return node_id in self._node_ids
+
+    def add_node(
+        self, node: GraphNode, *, parent_id: str | None = None
+    ) -> bool:
+        """添加节点, 自动去重. 可选创建 ``contains`` 边.
+
+        Args:
+            node: 待添加的图节点.
+            parent_id: 父节点 ID, 若提供则自动创建 ``contains`` 边.
+
+        Returns:
+            ``True`` 如果节点被添加, ``False`` 如果已存在 (跳过).
+        """
+        if node.id in self._node_ids:
+            logger.warning(
+                '[GraphBuilder] Duplicate node ID "%s" — skipping', node.id
+            )
+            return False
+        self._node_ids.add(node.id)
+        self._nodes.append(node)
+        if parent_id is not None:
+            self._edges.append(make_contains_edge(parent_id, node.id))
+        return True
+
+    def add_edge(self, edge: GraphEdge) -> bool:
+        """添加边, 按 ``(source, target, type)`` 自动去重.
+
+        Args:
+            edge: 待添加的图边.
+
+        Returns:
+            ``True`` 如果边被添加, ``False`` 如果已存在 (跳过).
+        """
+        key = f"{edge.source}|{edge.target}|{edge.type.value}"
+        if key in self._edge_keys:
+            return False
+        self._edge_keys.add(key)
+        self._edges.append(edge)
+        return True
+
+    # ------------------------------------------------------------------
+    # Public API (文件级别)
     # ------------------------------------------------------------------
 
     def add_file(
@@ -481,17 +782,21 @@ class GraphBuilder:
             self._nodes.append(class_node)
             self._edges.append(make_contains_edge(file_id, class_node.id))
 
-            # Create method nodes as children of the class node.
-            # Node ID format: function:{file}:{method}  (same as top-level
-            # functions) so that call edges can reference methods by the
-            # same scheme regardless of whether the caller/callee is a
-            # top-level function or a method.
-            for method_name in cls.methods:
+            # Create method nodes as children of the class node
+            # 优先使用 method_details, 回退到 methods 字符串列表
+            if cls.method_details:
+                method_iter = cls.method_details
+            else:
+                method_iter = [
+                    MethodInfo(name=n, line_range=cls.line_range)
+                    for n in cls.methods
+                ]
+            for method in method_iter:
                 method_node = make_function_node(
                     file_path,
-                    name=method_name,
-                    line_range=cls.line_range,  # fallback: class range
-                    summary=summaries.get(method_name, f"Method: {method_name}"),
+                    name=method.name,
+                    line_range=method.line_range,
+                    summary=summaries.get(method.name, f"Method: {method.name}"),
                     complexity=complexity,
                 )
                 if method_node.id in self._node_ids:
@@ -505,6 +810,104 @@ class GraphBuilder:
                 self._edges.append(
                     make_contains_edge(class_node.id, method_node.id)
                 )
+
+            # 继承/实现边延迟到跨文件解析阶段处理
+            # 直接构造 node id 假设父类/接口在同一文件, 会导致
+            # 跨文件继承时产生 dangling edge, SQLite 外键约束下保存失败.
+            if cls.inheritance:
+                for parent in cls.inheritance.extends:
+                    self._deferred_inheritance.append(
+                        (class_node.id, parent, "extends")
+                    )
+                for iface_name in cls.inheritance.implements:
+                    self._deferred_inheritance.append(
+                        (class_node.id, iface_name, "implements")
+                    )
+
+        # Create variable nodes
+        for var in analysis.variables or []:
+            var_node = make_variable_node(
+                file_path,
+                name=var.name,
+                line_range=var.line_range,
+                summary=summaries.get(var.name, f"Variable: {var.name}"),
+                complexity=complexity,
+            )
+            self._add_child_node(var_node, parent_id=file_id)
+
+        # Create enum nodes
+        for enum in analysis.enums or []:
+            enum_node = make_enum_node(
+                file_path,
+                name=enum.name,
+                line_range=enum.line_range,
+                summary=summaries.get(enum.name, f"Enum: {enum.name}"),
+                complexity=complexity,
+            )
+            self._add_child_node(enum_node, parent_id=file_id)
+
+            # Enum values as children of the enum
+            for value in enum.values:
+                value_node = make_generic_node(
+                    node_id=f"variable:{file_path}:{enum.name}:{value}",
+                    node_type=NodeType.VARIABLE,
+                    name=value,
+                    file_path=file_path,
+                    summary=f"Enum value: {enum.name}.{value}",
+                    complexity=complexity,
+                )
+                self._add_child_node(value_node, parent_id=enum_node.id)
+
+            # Enum methods
+            for method in enum.methods:
+                method_node = make_function_node(
+                    file_path,
+                    name=method.name,
+                    line_range=method.line_range,
+                    summary=summaries.get(method.name, f"Method: {method.name}"),
+                    complexity=complexity,
+                )
+                self._add_child_node(method_node, parent_id=enum_node.id)
+
+        # Create interface nodes
+        for iface_info in analysis.interfaces or []:
+            iface_node = make_interface_node(
+                file_path,
+                name=iface_info.name,
+                line_range=iface_info.line_range,
+                summary=summaries.get(iface_info.name, f"Interface: {iface_info.name}"),
+                complexity=complexity,
+            )
+            self._add_child_node(iface_node, parent_id=file_id)
+
+            # Interface methods
+            for method in iface_info.methods:
+                method_node = make_function_node(
+                    file_path,
+                    name=method.name,
+                    line_range=method.line_range,
+                    summary=summaries.get(method.name, f"Method: {method.name}"),
+                    complexity=complexity,
+                )
+                self._add_child_node(method_node, parent_id=iface_node.id)
+
+            # 接口继承边也延迟到跨文件解析阶段处理
+            # (与 class 继承/实现边使用同一套 deferred 机制)
+            for parent in iface_info.extends:
+                self._deferred_inheritance.append(
+                    (iface_node.id, parent, "extends")
+                )
+
+        # Create type alias nodes
+        for ta in analysis.type_aliases or []:
+            ta_node = make_type_alias_node(
+                file_path,
+                name=ta.name,
+                line_range=ta.line_range,
+                summary=summaries.get(ta.name, f"Type alias: {ta.name}"),
+                complexity=complexity,
+            )
+            self._add_child_node(ta_node, parent_id=file_id)
 
         return file_id
 
@@ -572,6 +975,65 @@ class GraphBuilder:
                 f"function:{callee_file}:{callee_func}",
             )
         )
+
+    def resolve_inheritance_edges(
+        self,
+        symbol_map: dict[str, list[tuple[str, str]]],
+    ) -> int:
+        """解析延迟的继承/实现边, 使用全局符号表定位目标节点.
+
+        在 ``add_file_with_analysis`` 中继承/实现边的目标节点 ID
+        不能直接构造 (父类/接口可能在不同文件). 此方法在所有文件
+        分析完成后, 利用全局 ``symbol_map`` 将类名/接口名解析为
+        正确的节点 ID.
+
+        Args:
+            symbol_map: 全局符号表, ``{symbol_name: [(file_path, kind)]}``.
+
+        Returns:
+            成功解析并添加的边数量.
+        """
+        count = 0
+        for source_node_id, parent_name, edge_type in self._deferred_inheritance:
+            entries = symbol_map.get(parent_name, [])
+
+            if edge_type == "extends":
+                # 根据源节点 ID 前缀决定查找 class 还是 interface
+                source_kind = (
+                    "interface"
+                    if source_node_id.startswith("interface:")
+                    else "class"
+                )
+                for file_path, kind in entries:
+                    if kind == source_kind:
+                        target_id = (
+                            f"{source_kind}:{file_path}:{parent_name}"
+                        )
+                        key = f"inherits|{source_node_id}|{target_id}"
+                        if key not in self._edge_keys:
+                            self._edge_keys.add(key)
+                            self._edges.append(
+                                make_extends_edge(source_node_id, target_id)
+                            )
+                            count += 1
+                        break  # 使用第一个匹配
+
+            elif edge_type == "implements":
+                # 查找 kind == "interface" 的条目
+                for file_path, kind in entries:
+                    if kind == "interface":
+                        target_id = f"interface:{file_path}:{parent_name}"
+                        key = f"implements|{source_node_id}|{target_id}"
+                        if key not in self._edge_keys:
+                            self._edge_keys.add(key)
+                            self._edges.append(
+                                make_implements_edge(source_node_id, target_id)
+                            )
+                            count += 1
+                        break  # 使用第一个匹配
+
+        self._deferred_inheritance.clear()
+        return count
 
     def add_non_code_file(
         self,
@@ -748,7 +1210,7 @@ class GraphBuilder:
             project=ProjectMeta(
                 name=self._project_name,
                 languages=sorted(self._languages),
-                frameworks=[],
+                frameworks=self._detected_frameworks,
                 description="",
                 analyzedAt=datetime.now(timezone.utc).isoformat(),
                 gitCommitHash=self._git_hash,

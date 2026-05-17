@@ -11,6 +11,7 @@ from understand_anything.types import (
     DefinitionInfo,
     EndpointInfo,
     FunctionInfo,
+    MethodInfo,
     ResourceInfo,
     ServiceInfo,
     StepInfo,
@@ -87,6 +88,10 @@ class TestGraphBuilder:
                     name="DataStore",
                     line_range=(50, 100),
                     methods=["get", "set"],
+                    method_details=[
+                        MethodInfo(name="get", line_range=(0, 0)),
+                        MethodInfo(name="set", line_range=(0, 0)),
+                    ],
                     properties=["data"],
                 ),
             ],

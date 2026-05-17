@@ -2,17 +2,24 @@
 
 Python port of persistence/index.ts.  Uses pathlib.Path for all file I/O
 instead of Node's fs/path.
+
+提供两种后端:
+  - ``"json"`` (默认): JSON 文件持久化 (向后兼容)
+  - ``"sqlite"``: SQLite + FTS5 全文搜索
 """
 
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from understand_anything.schema import validate_graph
 from understand_anything.types import AnalysisMeta, KnowledgeGraph, ProjectConfig
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -307,3 +314,36 @@ def load_all(
         "fingerprints": load_fingerprints(project_root),
         "config": load_config(project_root),
     }
+
+
+# ---------------------------------------------------------------------------
+# 后端选择工厂 (v2: 保持 JSON 和 SQLite 独立, 不强行包装)
+# ---------------------------------------------------------------------------
+
+
+def create_backend(
+    project_root: str | Path,
+    *,
+    backend: Literal["json", "sqlite"] = "json",
+) -> tuple[Literal["json", "sqlite"], Any]:
+    """创建持久化后端.
+
+    v2 设计: JSON 后端使用模块级函数 (save_graph 等), SQLite 后端返回
+    ``SqliteBackend`` 实例. 两者保持独立, 调用方自行选择.
+
+    Args:
+        project_root: 项目根目录.
+        backend: 后端类型.
+
+    Returns:
+        ``(backend_type, sqlite_instance_or_none)`` 元组.
+        当 ``backend="json"`` 时 sqlite 为 ``None``.
+    """
+    if backend == "sqlite":
+        from understand_anything.persistence.sqlite_backend import (
+            SqliteBackend,
+        )
+
+        return ("sqlite", SqliteBackend(Path(project_root)))
+    return ("json", None)
+

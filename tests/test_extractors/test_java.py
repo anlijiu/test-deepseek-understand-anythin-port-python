@@ -172,10 +172,10 @@ class TestExtractStructureInterfaces:
         extractor = JavaExtractor()
         result = extractor.extract_structure(root)
 
-        assert len(result.classes) == 1
-        assert result.classes[0].name == "Repository"
-        assert result.classes[0].methods == ["findAll", "findById"]
-        assert result.classes[0].properties == []
+        assert len(result.interfaces) == 1
+        assert result.interfaces[0].name == "Repository"
+        assert [m.name for m in result.interfaces[0].methods] == ["findAll", "findById"]
+        assert result.interfaces[0].properties == []
 
     def test_extracts_empty_interface(self, parse_java):
         root = parse_java("""interface Marker {
@@ -184,9 +184,9 @@ class TestExtractStructureInterfaces:
         extractor = JavaExtractor()
         result = extractor.extract_structure(root)
 
-        assert len(result.classes) == 1
-        assert result.classes[0].name == "Marker"
-        assert result.classes[0].methods == []
+        assert len(result.interfaces) == 1
+        assert result.interfaces[0].name == "Marker"
+        assert [m.name for m in result.interfaces[0].methods] == []
 
 
 # ---------------------------------------------------------------------------
@@ -457,8 +457,8 @@ interface Repository {
         assert log.params == ["message"]
         assert log.return_type == "void"
 
-        # Classes: UserService, Repository
-        assert len(result.classes) == 2
+        # Classes: UserService
+        assert len(result.classes) == 1
 
         user_service = next(c for c in result.classes if c.name == "UserService")
         assert user_service is not None
@@ -467,9 +467,9 @@ interface Repository {
         )
         assert sorted(user_service.properties) == sorted(["name", "maxRetries"])
 
-        repository = next(c for c in result.classes if c.name == "Repository")
+        repository = next(c for c in result.interfaces if c.name == "Repository")
         assert repository is not None
-        assert repository.methods == ["findAll", "findById"]
+        assert [m.name for m in repository.methods] == ["findAll", "findById"]
         assert repository.properties == []
 
         # Imports: 2 (java.util.List, java.util.Map)

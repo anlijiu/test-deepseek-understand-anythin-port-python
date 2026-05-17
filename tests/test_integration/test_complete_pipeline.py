@@ -722,17 +722,24 @@ main();
             f"Dangling target in edge: {edge.source} -> {edge.target}"
         )
 
-    # console.log 和 greet 不应产生同文件 call 边（它们不在 index.ts 中定义）
+    # 验证 call 边来源和目标合理性
     call_edges = [e for e in result.graph.edges if e.type == "calls"]
     for e in call_edges:
         # helper 是 index.ts 中定义的函数，main -> helper 是合法的同文件调用
-        assert "main" in e.source or "helper" in e.source
-        # greet 是 utils.ts 中的，main 调用它不应成为同文件 call 边
-        assert "greet" not in e.target, (
-            f"greet should not appear as same-file callee, got {e.target}"
+        assert "main" in e.source or "helper" in e.source, (
+            f"Unexpected call source: {e.source}"
         )
+        # console.log 是外部符号, 不应出现在 call 边中
         assert "console.log" not in e.target, (
             f"console.log should not appear as callee, got {e.target}"
+        )
+        assert "console.log" not in e.source, (
+            f"console.log should not appear as caller, got {e.source}"
+        )
+        # greet 是 utils.ts 中的, 不应作为同文件 (index.ts) callee
+        assert "src/index.ts:greet" not in e.target, (
+            f"greet should not appear as same-file callee in index.ts, "
+            f"got {e.target}"
         )
 
     # 验证持久化的图也不包含悬空边
@@ -748,6 +755,62 @@ main();
         assert edge.target in reloaded_ids, (
             f"Persisted dangling target: {edge.source} -> {edge.target}"
         )
+
+
+def test_cross_file_call_edge_source_is_caller(
+    mini_typescript_project: Path,
+) -> None:
+    """跨文件 call 边源节点应为 caller 函数, 而非 callee.
+
+    验证 Pipeline 写入的 calls edge 使用 caller_symbol (非 symbol/callee)
+    作为源函数, 且目标函数指向正确的文件.
+    """
+    pipeline = Pipeline(mini_typescript_project)
+    result = pipeline.run()
+
+    graph = result.graph
+    node_ids = {n.id for n in graph.nodes}
+
+    # 收集所有 calls 边
+    call_edges = [e for e in graph.edges if e.type == "calls"]
+    # 应该有 main -> greet 的跨文件调用 (console.log 被过滤)
+    assert len(call_edges) >= 1, (
+        f"Expected at least 1 cross-file call edge, got {len(call_edges)}"
+    )
+
+    for edge in call_edges:
+        # 每个 call 边的 source 和 target 都应存在
+        assert edge.source in node_ids, (
+            f"Dangling call source: {edge.source}"
+        )
+        assert edge.target in node_ids, (
+            f"Dangling call target: {edge.target}"
+        )
+
+        # source 应该是 function:src/index.ts:<caller>
+        # target 应该是 function:src/utils.ts:<callee>
+        # 验证 source 是 index.ts 中的函数 (main), 不是 greet
+
+        # source 文件路径部分应该匹配源文件
+        assert "src/index.ts" in edge.source, (
+            f"Call edge source should be in index.ts, got {edge.source}"
+        )
+        # target 如果是 greet, 应该在 utils.ts 中
+        if "greet" in edge.target:
+            assert "src/utils.ts" in edge.target, (
+                f"greet should be callee in utils.ts, got {edge.target}"
+            )
+
+        # 核心断言: source 不应该以 callee 的函数名命名
+        # (修复前 bug: caller_func 被错误设置为 callee 名)
+        # 这里确保 source 不包含 greet (除非真的有函数叫 greet 在 index.ts)
+        if "greet" in edge.source:
+            # source 中有 greet 意味着把 callee 当成了 caller
+            # 除非 src/index.ts 中恰好有函数叫 greet (当前测试没有)
+            assert "src/utils.ts" in edge.source, (
+                f"greet in source should be from utils.ts, "
+                f"got {edge.source} (bug: callee used as caller)"
+            )
 
 
 def test_git_hash_auto_detection(mini_python_project: Path) -> None:

@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 
 class NodeType(str, Enum):
-    """21 node types: 5 code + 8 non-code + 3 domain + 5 knowledge."""
+    """25 node types: 9 code + 8 non-code + 3 domain + 5 knowledge."""
 
     FILE = "file"
     FUNCTION = "function"
@@ -37,10 +37,15 @@ class NodeType(str, Enum):
     TOPIC = "topic"
     CLAIM = "claim"
     SOURCE = "source"
+    # 扩展代码节点类型
+    VARIABLE = "variable"
+    ENUM = "enum"
+    INTERFACE = "interface"
+    TYPE_ALIAS = "type_alias"
 
 
 class EdgeType(str, Enum):
-    """35 edge types in 8 categories."""
+    """42 edge types in 9 categories."""
 
     # Structural
     IMPORTS = "imports"
@@ -86,6 +91,13 @@ class EdgeType(str, Enum):
     EXEMPLIFIES = "exemplifies"
     CATEGORIZED_UNDER = "categorized_under"
     AUTHORED_BY = "authored_by"
+    # 扩展代码关系类型
+    REFERENCES = "references"
+    TYPE_OF = "type_of"
+    OVERRIDES = "overrides"
+    DECORATES = "decorates"
+    INSTANTIATES = "instantiates"
+    RETURNS = "returns"
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +254,70 @@ class ProjectConfig(BaseModel):
 
 
 @dataclass
+class MethodInfo:
+    """Extracted method detail within a class/interface.
+
+    包含方法名、行范围、参数列表、返回类型以及修饰信息。
+    """
+
+    name: str
+    line_range: tuple[int, int]
+    params: list[str] = field(default_factory=list)
+    return_type: str | None = None
+    is_constructor: bool = False
+    is_static: bool = False
+    visibility: str = "public"  # public | private | protected | package-private
+
+
+@dataclass
+class VariableInfo:
+    """Extracted top-level or module-level variable/constant."""
+
+    name: str
+    line_range: tuple[int, int]
+    type_annotation: str | None = None
+    is_const: bool = False
+
+
+@dataclass
+class EnumInfo:
+    """Extracted enum definition with its members and methods."""
+
+    name: str
+    line_range: tuple[int, int]
+    values: list[str] = field(default_factory=list)
+    methods: list[MethodInfo] = field(default_factory=list)
+
+
+@dataclass
+class InterfaceInfo:
+    """Extracted interface / protocol / trait definition."""
+
+    name: str
+    line_range: tuple[int, int]
+    methods: list[MethodInfo] = field(default_factory=list)
+    properties: list[str] = field(default_factory=list)
+    extends: list[str] = field(default_factory=list)
+
+
+@dataclass
+class TypeAliasInfo:
+    """Extracted type alias definition."""
+
+    name: str
+    line_range: tuple[int, int]
+    target_type: str = ""
+
+
+@dataclass
+class InheritanceInfo:
+    """Inheritance and interface implementation metadata for a class."""
+
+    extends: list[str] = field(default_factory=list)
+    implements: list[str] = field(default_factory=list)
+
+
+@dataclass
 class FunctionInfo:
     """Extracted function/method information."""
 
@@ -257,8 +333,12 @@ class ClassInfo:
 
     name: str
     line_range: tuple[int, int]
-    methods: list[str] = field(default_factory=list)
+    methods: list[str] = field(default_factory=list)  # 向后兼容: 方法名列表
     properties: list[str] = field(default_factory=list)
+    inheritance: InheritanceInfo | None = None
+    method_details: list[MethodInfo] = field(
+        default_factory=list
+    )  # 扩展: 完整方法信息
 
 
 @dataclass
@@ -348,6 +428,11 @@ class StructuralAnalysis:
     endpoints: list[EndpointInfo] = field(default_factory=list)
     steps: list[StepInfo] = field(default_factory=list)
     resources: list[ResourceInfo] = field(default_factory=list)
+    # 扩展字段 — 更丰富的代码结构信息
+    variables: list[VariableInfo] = field(default_factory=list)
+    enums: list[EnumInfo] = field(default_factory=list)
+    interfaces: list[InterfaceInfo] = field(default_factory=list)
+    type_aliases: list[TypeAliasInfo] = field(default_factory=list)
 
 
 @dataclass

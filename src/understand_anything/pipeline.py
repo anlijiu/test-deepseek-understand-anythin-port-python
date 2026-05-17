@@ -22,17 +22,26 @@ from typing import TYPE_CHECKING
 
 from understand_anything.analysis.graph_builder import GraphBuilder
 from understand_anything.analysis.layer_detector import detect_layers
+from understand_anything.analysis.resolution import (
+    ReferenceResolver,
+    build_resolution_context,
+)
+from understand_anything.analysis.resolution.types import UnresolvedRef
 from understand_anything.analysis.tour_generator import generate_heuristic_tour
 from understand_anything.ignore.filter import filter_files, load_ignore_spec
 from understand_anything.languages.registry import LanguageRegistry
 from understand_anything.persistence import (
+    create_backend,
     save_fingerprints,
     save_graph,
     touch_meta,
 )
 from understand_anything.schema import ValidationResult, validate_graph
+from understand_anything.types import GraphNode
 
 if TYPE_CHECKING:
+    from typing import Literal
+
     from understand_anything.plugins.registry import PluginRegistry
     from understand_anything.types import (
         AnalysisMeta,
@@ -106,6 +115,7 @@ class Pipeline:
         enable_layer_detection: bool = True,
         enable_tour_generation: bool = True,
         enable_persistence: bool = True,
+        backend: Literal["json", "sqlite"] = "json",
     ) -> None:
         """初始化管道.
 
@@ -121,6 +131,7 @@ class Pipeline:
             enable_layer_detection: 是否运行启发式层级检测.
             enable_tour_generation: 是否运行启发式导览生成.
             enable_persistence: 是否将图/元数据/指纹持久化到磁盘.
+            backend: 持久化后端 (``"json"`` 或 ``"sqlite"``).
         """
         self._project_root = Path(project_root).resolve()
         self._include_gitignore = include_gitignore
@@ -129,6 +140,7 @@ class Pipeline:
         self._enable_layer_detection = enable_layer_detection
         self._enable_tour_generation = enable_tour_generation
         self._enable_persistence = enable_persistence
+        self._backend_type = backend
 
         # Git hash
         self._git_hash = git_hash or self._detect_git_hash()
@@ -181,6 +193,14 @@ class Pipeline:
             len(included_files),
             ignored_count,
         )
+
+        # 2.5 框架检测 (Phase 4)
+        detected_frameworks = self._detect_frameworks(included_files)
+        if detected_frameworks:
+            logger.info(
+                "Detected frameworks: %s",
+                [f.display_name for f in detected_frameworks],
+            )
 
         # 3-4. 构建图
         builder = GraphBuilder(
@@ -264,6 +284,27 @@ class Pipeline:
                 builder, rel_path, content, analysis
             )
 
+        # 2.5 跨文件引用解析 (Phase 2 — 新增)
+        self._resolve_cross_file_references(
+            builder,
+            list(import_resolution_queue),
+            analyzed_paths,
+            path_to_node_id,
+        )
+
+        # 2.6 框架感知解析 (Phase 8 — 产出 graph 节点/边)
+        if detected_frameworks:
+            self._resolve_frameworks(
+                builder,
+                list(import_resolution_queue),
+                detected_frameworks,
+                path_to_node_id,
+            )
+
+        # 将检测到的框架注入 builder
+        if detected_frameworks:
+            builder.set_frameworks([f.display_name for f in detected_frameworks])
+
         # 4. 构建图
         graph = builder.build()
         logger.info("Graph built: %d nodes, %d edges", len(graph.nodes), len(graph.edges))
@@ -303,13 +344,21 @@ class Pipeline:
         # 9. 持久化
         meta: AnalysisMeta | None = None
         if self._enable_persistence:
-            save_graph(self._project_root, graph)
+            _backend_type, sqlite = create_backend(
+                self._project_root, backend=self._backend_type
+            )
+            if sqlite is not None:
+                sqlite.save_graph(graph)
+                sqlite.save_fingerprints(fingerprints)
+                sqlite.close()
+            else:
+                save_graph(self._project_root, graph)
+                save_fingerprints(self._project_root, fingerprints)
             meta = touch_meta(
                 self._project_root,
                 git_commit_hash=self._git_hash,
                 analyzed_files=analyzed,
             )
-            save_fingerprints(self._project_root, fingerprints)
             logger.info("Persisted graph, meta, and fingerprints")
 
         # 10. 返回结果
@@ -328,16 +377,29 @@ class Pipeline:
     # Internal: file discovery & filtering
     # ------------------------------------------------------------------
 
+    # 文件发现时排除的目录名
+    _EXCLUDED_DIRS = frozenset({
+        ".understand-anything",
+        ".uv-cache",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "node_modules",
+        ".git",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".pytest_cache",
+    })
+
     def _discover_files(self) -> list[Path]:
-        """递归扫描项目目录，排除目录和 ``.understand-anything/``."""
+        """递归扫描项目目录，排除缓存和虚拟环境目录."""
         files: list[Path] = []
-        output_dir_name = ".understand-anything"
 
         for entry in self._project_root.rglob("*"):
             if not entry.is_file():
                 continue
-            # 排除 .understand-anything/ 下的所有文件
-            if output_dir_name in entry.parts:
+            # 排除位于已知缓存目录下的文件
+            if self._EXCLUDED_DIRS.intersection(entry.parts):
                 continue
             files.append(entry.relative_to(self._project_root))
 
@@ -482,6 +544,8 @@ class Pipeline:
         known_functions = {fn.name for fn in analysis.functions}
         for cls in analysis.classes:
             known_functions.update(cls.methods)
+            if cls.method_details:
+                known_functions.update(m.name for m in cls.method_details)
 
         for entry in calls:
             caller_name = self._normalize_call_name(entry.caller, known_functions)
@@ -513,6 +577,279 @@ class Pipeline:
             if method_part in known_functions:
                 return method_part
         return None
+
+    def _resolve_cross_file_references(
+        self,
+        builder: GraphBuilder,
+        queue: list[tuple[str, str, StructuralAnalysis]],
+        analyzed_paths: set[str],
+        path_to_node_id: dict[str, str],
+    ) -> None:
+        """跨文件引用解析 (Phase 2).
+
+        构建解析上下文, 收集未解析引用, 执行四级解析策略,
+        将高置信度引用添加为图边.
+
+        Args:
+            builder: 图构建器.
+            queue: ``(file_path, content, analysis)`` 列表.
+            analyzed_paths: 已分析文件路径集合.
+            path_to_node_id: 路径 → 节点 ID 映射.
+        """
+        # 构建解析上下文
+        import_map: dict[str, dict[str, str]] = {}
+        export_map: dict[str, set[str]] = {}
+        symbol_map: dict[str, list[tuple[str, str]]] = {}
+        language_map: dict[str, str] = {}
+
+        for rel_path, _content, analysis in queue:
+            # 导入映射: file -> {import_source: target_file} (通过现有匹配逻辑)
+            lang = self._language_registry.get_for_file(rel_path)
+            if lang:
+                language_map[rel_path] = lang.id
+
+            # 导出映射: file -> {exported_name}
+            exports = {e.name for e in analysis.exports}
+            if exports:
+                export_map[rel_path] = exports
+
+            # 符号映射: symbol_name -> [(file, kind)]
+            for fn in analysis.functions:
+                symbol_map.setdefault(fn.name, []).append(
+                    (rel_path, "function")
+                )
+            for cls in analysis.classes:
+                symbol_map.setdefault(cls.name, []).append(
+                    (rel_path, "class")
+                )
+                for method_name in cls.methods:
+                    symbol_map.setdefault(method_name, []).append(
+                        (rel_path, "method")
+                    )
+                for method in cls.method_details or []:
+                    symbol_map.setdefault(method.name, []).append(
+                        (rel_path, "method")
+                    )
+            for var in analysis.variables or []:
+                symbol_map.setdefault(var.name, []).append(
+                    (rel_path, "variable")
+                )
+            for enum in analysis.enums or []:
+                symbol_map.setdefault(enum.name, []).append(
+                    (rel_path, "enum")
+                )
+            for iface in analysis.interfaces or []:
+                symbol_map.setdefault(iface.name, []).append(
+                    (rel_path, "interface")
+                )
+            for ta in analysis.type_aliases or []:
+                symbol_map.setdefault(ta.name, []).append(
+                    (rel_path, "type_alias")
+                )
+
+            # 解析导入到文件的映射 (复用现有 _match_import_target)
+            file_imports: dict[str, str] = {}
+            for imp in analysis.imports:
+                resolved = self._match_import_target(
+                    imp.source, imp.source, rel_path,
+                    analyzed_paths, path_to_node_id,
+                )
+                if resolved:
+                    target_path = resolved.split(":", 1)[-1]
+                    file_imports[imp.source] = target_path
+            if file_imports:
+                import_map[rel_path] = file_imports
+
+        # 解析继承/实现边 (使用全局符号表定位目标节点)
+        inheritance_resolved = builder.resolve_inheritance_edges(symbol_map)
+        if inheritance_resolved:
+            logger.info(
+                "Resolved %d inheritance/implementation edges",
+                inheritance_resolved,
+            )
+
+        # 构建解析上下文
+        ctx = build_resolution_context(
+            workspace_root=str(self._project_root),
+            analyzed_files=analyzed_paths,
+            import_map=import_map,
+            export_map=export_map,
+            symbol_map=symbol_map,
+        )
+
+        # 创建解析器
+        resolver = ReferenceResolver(ctx)
+
+        # 收集未解析引用
+        all_unresolved: dict[str, list[UnresolvedRef]] = {}
+
+        for rel_path, content, analysis in queue:
+            unresolved: list[UnresolvedRef] = []
+
+            # 从调用图中收集跨文件调用
+            calls = self._plugin_registry.extract_call_graph(
+                rel_path, content
+            )
+            if calls:
+                known_local = {fn.name for fn in analysis.functions}
+                for cls in analysis.classes:
+                    known_local.update(cls.methods)
+                    if cls.method_details:
+                        known_local.update(m.name for m in cls.method_details)
+
+                for entry in calls:
+                    callee_name = self._normalize_call_name(
+                        entry.callee, known_local
+                    )
+                    # Only treat as cross-file if NOT a local call
+                    if callee_name is None and entry.callee not in known_local:
+                        unresolved.append(
+                            UnresolvedRef(
+                                source_file=rel_path,
+                                symbol=entry.callee,
+                                ref_type="call",
+                                line_number=entry.line_number,
+                                caller_symbol=entry.caller,
+                            )
+                        )
+
+            # 从导入中收集未解析引用
+            for imp in analysis.imports:
+                for spec in imp.specifiers:
+                    if spec == "*":
+                        continue
+                    unresolved.append(
+                        UnresolvedRef(
+                            source_file=rel_path,
+                            symbol=spec,
+                            ref_type="import",
+                            line_number=imp.line_number,
+                            import_source=imp.source,
+                        )
+                    )
+
+            if unresolved:
+                all_unresolved[rel_path] = unresolved
+
+        if not all_unresolved:
+            logger.debug("No unresolved cross-file references found.")
+            return
+
+        # 执行解析
+        resolved_refs = resolver.resolve_all(
+            all_unresolved, language_map=language_map
+        )
+        logger.info(
+            "Cross-file resolution: %d unresolved → %d resolved",
+            sum(len(v) for v in all_unresolved.values()),
+            len(resolved_refs),
+        )
+
+        # 添加跨文件边 (v2: 仅高置信度 ≥ 0.9)
+        added_edges = 0
+        for ref in resolved_refs:
+            if ref.confidence < 0.9:
+                continue
+
+            source_node_id = path_to_node_id.get(ref.unresolved.source_file)
+            target_node_id = path_to_node_id.get(ref.target_file)
+
+            if source_node_id is None or target_node_id is None:
+                continue
+
+            edge_type = ref.edge_type_hint
+
+            if edge_type == "calls":
+                # 精确到函数级别的 call 边
+                # 注意: symbol 是 callee, caller_symbol 才是调用方
+                caller_func = ref.unresolved.caller_symbol
+                if not caller_func:
+                    continue  # 没有 caller 信息, 无法构造 call 边
+                builder.add_call_edge(
+                    caller_file=ref.unresolved.source_file,
+                    caller_func=caller_func,
+                    callee_file=ref.target_file,
+                    callee_func=ref.target_symbol,
+                )
+            elif edge_type == "imports":
+                builder.add_import_edge_by_id(
+                    source_node_id, target_node_id
+                )
+            elif edge_type in ("inherits", "implements"):
+                # 继承/实现边: source → target class/interface
+                pass  # 继承边已在 graph_builder 中处理
+            else:
+                # 默认添加通用 references 边
+                pass  # references 边是低优先级的, 由框架处理
+
+            added_edges += 1
+
+        logger.info(
+            "Cross-file edges added: %d (confidence ≥ 0.5)", added_edges
+        )
+
+    def _resolve_frameworks(
+        self,
+        builder: GraphBuilder,
+        queue: list[tuple[str, str, StructuralAnalysis]],
+        detected_frameworks: list,
+        path_to_node_id: dict[str, str],
+    ) -> None:
+        """框架感知解析 (Phase 8).
+
+        使用 FrameworkGraphResolver 从源代码中提取框架特有的图节点和边.
+
+        Args:
+            builder: 图构建器.
+            queue: ``(file_path, content, analysis)`` 列表.
+            detected_frameworks: 检测到的 FrameworkConfig 列表.
+            path_to_node_id: 路径 → 节点 ID 映射.
+        """
+        from understand_anything.analysis.resolution.framework_resolver import (
+            FrameworkGraphResolver,
+        )
+
+        resolver = FrameworkGraphResolver(detected_frameworks)
+        total_nodes = 0
+        total_edges = 0
+
+        for rel_path, content, _analysis in queue:
+            lang = self._language_registry.get_for_file(rel_path)
+            lang_id = lang.id if lang else "unknown"
+
+            frame_nodes, frame_edges = resolver.resolve_file(
+                rel_path, content, lang_id
+            )
+
+            # 添加框架产生的节点
+            for node_dict in frame_nodes:
+                node = GraphNode.model_validate(node_dict)
+                file_id = path_to_node_id.get(rel_path)
+                if builder.add_node(node, parent_id=file_id):
+                    total_nodes += 1
+
+            # 添加框架产生的边
+            for edge_dict in frame_edges:
+                from understand_anything.types import EdgeType, GraphEdge
+
+                edge_type = EdgeType(edge_dict["type"])
+                edge = GraphEdge(
+                    source=edge_dict["source"],
+                    target=edge_dict["target"],
+                    type=edge_type,
+                    direction="forward",
+                    weight=edge_dict.get("weight", 1.0),
+                    description=edge_dict.get("description"),
+                )
+                if builder.add_edge(edge):
+                    total_edges += 1
+
+        if total_nodes or total_edges:
+            logger.info(
+                "Framework resolution: %d nodes, %d edges added",
+                total_nodes,
+                total_edges,
+            )
 
     def _match_import_target(
         self,
@@ -739,6 +1076,53 @@ class Pipeline:
             else:
                 fingerprints[file_path_obj.as_posix()] = "binary-skipped"
         return fingerprints
+
+    def _detect_frameworks(self, included_files: list[Path]) -> list:
+        """检测项目使用的框架 (Phase 4).
+
+        通过扫描清单文件 (package.json, requirements.txt, pom.xml 等)
+        并使用 FrameworkRegistry 检测框架.
+
+        Args:
+            included_files: 经过 ignore 过滤后的文件列表.
+
+        Returns:
+            检测到的 FrameworkConfig 列表.
+        """
+        from understand_anything.languages.framework_registry import (
+            FrameworkRegistry,
+        )
+
+        # 常见的清单文件名
+        manifest_names = {
+            "package.json",
+            "requirements.txt",
+            "pyproject.toml",
+            "Pipfile",
+            "setup.cfg",
+            "setup.py",
+            "pom.xml",
+            "build.gradle",
+            "build.gradle.kts",
+            "go.mod",
+            "Gemfile",
+            "composer.json",
+            "Cargo.toml",
+        }
+
+        manifests: dict[str, str] = {}
+        for file_path_obj in included_files:
+            name = file_path_obj.name
+            if name in manifest_names:
+                content = self._read_file(file_path_obj)
+                if content is not None:
+                    manifests[name] = content
+
+        if not manifests:
+            return []
+
+        registry = FrameworkRegistry.create_default()
+        return registry.detect_frameworks(manifests)
 
     def _detect_git_hash(self) -> str:
         """通过 ``git rev-parse HEAD`` 检测当前 commit SHA.

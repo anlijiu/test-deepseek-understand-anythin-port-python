@@ -33,6 +33,8 @@
 1. cli 胶水层在 src/understand_anything/cli 目录
    - 命令行实现用 click 库
    - 每个 top-level command 一个独立文件
-   - 类似 `/home/an/workspace/python/meltano/src/meltano/cli` 这种处理方式
+   - cli.py for the Click group,
+   - separate files per command, and __init__.py to wire everything together.
+
 2. 所有接口要有中文注释， 本项目使用 MkDocs + mkdocstrings , 接口注释使用 Google 风格 docstring
 

@@ -72,6 +72,58 @@ class LanguageExtractor(ABC):
         """
         ...
 
+    def extract_variables(self, root_node: Node) -> list:
+        """Extract top-level variable/constant declarations (optional).
+
+        子类可覆写此方法以提取模块级变量。
+
+        Args:
+            root_node: The root ``Node`` of a tree-sitter parse tree.
+
+        Returns:
+            A list of ``VariableInfo`` objects.
+        """
+        return []
+
+    def extract_enums(self, root_node: Node) -> list:
+        """Extract enum definitions (optional).
+
+        子类可覆写此方法以提取枚举类型。
+
+        Args:
+            root_node: The root ``Node`` of a tree-sitter parse tree.
+
+        Returns:
+            A list of ``EnumInfo`` objects.
+        """
+        return []
+
+    def extract_interfaces(self, root_node: Node) -> list:
+        """Extract interface/protocol/trait definitions (optional).
+
+        子类可覆写此方法以提取接口定义。
+
+        Args:
+            root_node: The root ``Node`` of a tree-sitter parse tree.
+
+        Returns:
+            A list of ``InterfaceInfo`` objects.
+        """
+        return []
+
+    def extract_type_aliases(self, root_node: Node) -> list:
+        """Extract type alias definitions (optional).
+
+        子类可覆写此方法以提取类型别名。
+
+        Args:
+            root_node: The root ``Node`` of a tree-sitter parse tree.
+
+        Returns:
+            A list of ``TypeAliasInfo`` objects.
+        """
+        return []
+
 
 # ---------------------------------------------------------------------------
 # AnalyzerPlugin — top-level file analysis plugin
@@ -155,6 +207,23 @@ class AnalyzerPlugin(ABC):
         Returns:
             List of ``ReferenceResolution`` objects.  Default returns an
             empty list.
+        """
+        return []
+
+    def extract_unresolved_references(
+        self, file_path: str, content: str
+    ) -> list:
+        """Extract unresolved cross-file references from a file (optional).
+
+        从文件中提取所有潜在跨文件引用 (调用、导入、继承等),
+        以 ``UnresolvedRef`` 列表返回, 供 ``ReferenceResolver`` 解析.
+
+        Args:
+            file_path: Path to the source file.
+            content: The full source text of the file.
+
+        Returns:
+            List of ``UnresolvedRef`` objects.  Default returns an empty list.
         """
         return []
 

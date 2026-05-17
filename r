@@ -1,0 +1,1 @@
+uv run understand_anything --project-dir /home/an/disk/workspace/76_LLA_android/android/packages/services/Car/service/src/com/android/car  --project-dir /home/an/disk/workspace/76_LLA_android/android/packages/services/Car/car-lib/src/android/car  --project-dir /home/an/disk/workspace/76_LLA_android/android/vendor/nobo/project/v5/mtk/interfaces/impl

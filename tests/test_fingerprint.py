@@ -11,6 +11,7 @@ from understand_anything.analysis.fingerprint import (
 from understand_anything.types import (
     ClassInfo,
     FunctionInfo,
+    MethodInfo,
     StructuralAnalysis,
 )
 
@@ -65,7 +66,7 @@ class TestExtractFileFingerprint:
     def test_extracts_class_signatures(self) -> None:
         analysis = _make_analysis(
             classes=[
-                ClassInfo(name="DataStore", line_range=(50, 100), methods=["get", "set"], properties=["data"]),
+                ClassInfo(name="DataStore", line_range=(50, 100), methods=["get", "set"], method_details=[MethodInfo(name="get", line_range=(0, 0)), MethodInfo(name="set", line_range=(0, 0))], properties=["data"]),
             ],
         )
         fp = extract_file_fingerprint("src/store.ts", "line\n" * 10, analysis)

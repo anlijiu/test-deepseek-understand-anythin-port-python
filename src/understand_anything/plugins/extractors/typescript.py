@@ -28,10 +28,16 @@ from understand_anything.plugins.extractors.types import LanguageExtractor
 from understand_anything.types import (
     CallGraphEntry,
     ClassInfo,
+    EnumInfo,
     ExportInfo,
     FunctionInfo,
     ImportInfo,
+    InheritanceInfo,
+    InterfaceInfo,
+    MethodInfo,
     StructuralAnalysis,
+    TypeAliasInfo,
+    VariableInfo,
 )
 
 if TYPE_CHECKING:
@@ -79,6 +85,9 @@ _NAMESPACE_IMPORT = "namespace_import"
 _IMPORT = "import"
 _IMPORT_CLAUSE = "import_clause"
 _STRING_FRAGMENT = "string_fragment"
+_INTERFACE_DECLARATION = "interface_declaration"
+_ENUM_DECLARATION = "enum_declaration"
+_TYPE_ALIAS_DECLARATION = "type_alias_declaration"
 
 
 # ---------------------------------------------------------------------------
@@ -127,6 +136,15 @@ class TypeScriptExtractor(LanguageExtractor):
             elif node_type in (_CLASS_DECLARATION, _ABSTRACT_CLASS_DECLARATION):
                 analysis.classes.append(self._extract_class(node))
 
+            elif node_type == _INTERFACE_DECLARATION:
+                analysis.interfaces.append(self._extract_interface(node))
+
+            elif node_type == _ENUM_DECLARATION:
+                analysis.enums.append(self._extract_enum(node))
+
+            elif node_type == _TYPE_ALIAS_DECLARATION:
+                analysis.type_aliases.append(self._extract_type_alias(node))
+
             elif node_type == _IMPORT_STATEMENT:
                 analysis.imports.append(self._extract_import(node))
 
@@ -136,10 +154,12 @@ class TypeScriptExtractor(LanguageExtractor):
             elif node_type == _LEXICAL_DECLARATION:
                 self._extract_lexical_functions(node, analysis)
                 self._extract_lexical_exports(node, analysis)
+                self._extract_lexical_variables(node, analysis)
 
             elif node_type == _VARIABLE_DECLARATION:
                 self._extract_lexical_functions(node, analysis)
                 self._extract_variable_exports(node, analysis)
+                self._extract_lexical_variables(node, analysis)
 
         traverse(root_node, visitor)
 
@@ -213,7 +233,7 @@ class TypeScriptExtractor(LanguageExtractor):
         name = get_node_text(name_node) if name_node else "<anonymous>"
         line_range = (node.start_point[0] + 1, node.end_point[0] + 1)
 
-        methods: list[str] = []
+        method_details: list[MethodInfo] = []
         properties: list[str] = []
 
         # Extract class body
@@ -221,9 +241,22 @@ class TypeScriptExtractor(LanguageExtractor):
         if body_node is not None:
             for child in body_node.children:
                 if child.type == _METHOD_DEFINITION:
-                    method_name = find_child(child, _PROPERTY_IDENTIFIER)
-                    if method_name:
-                        methods.append(get_node_text(method_name))
+                    mn = find_child(child, _PROPERTY_IDENTIFIER)
+                    if mn:
+                        m_name = get_node_text(mn)
+                        m_params = self._extract_parameters(child)
+                        m_ret = self._extract_return_type(child)
+                        method_details.append(
+                            MethodInfo(
+                                name=m_name,
+                                line_range=(
+                                    child.start_point[0] + 1,
+                                    child.end_point[0] + 1,
+                                ),
+                                params=m_params,
+                                return_type=m_ret,
+                            )
+                        )
                 elif child.type in (
                     _PUBLIC_FIELD_DEFINITION,
                     _PRIVATE_FIELD_DEFINITION,
@@ -237,14 +270,231 @@ class TypeScriptExtractor(LanguageExtractor):
                         if sibling.type == _METHOD_DEFINITION:
                             mn = find_child(sibling, _PROPERTY_IDENTIFIER)
                             if mn:
-                                methods.append(get_node_text(mn))
+                                m_name = get_node_text(mn)
+                                m_params = self._extract_parameters(sibling)
+                                m_ret = self._extract_return_type(sibling)
+                                method_details.append(
+                                    MethodInfo(
+                                        name=m_name,
+                                        line_range=(
+                                            sibling.start_point[0] + 1,
+                                            sibling.end_point[0] + 1,
+                                        ),
+                                        params=m_params,
+                                        return_type=m_ret,
+                                    )
+                                )
+
+        # Detect inheritance
+        inheritance = self._extract_class_heritage(node)
 
         return ClassInfo(
             name=name,
             line_range=line_range,
-            methods=methods,
+            methods=[m.name for m in method_details],
             properties=properties,
+            inheritance=inheritance,
+            method_details=method_details,
         )
+
+    @staticmethod
+    def _extract_class_heritage(node: Node) -> InheritanceInfo | None:
+        """Extract extends/implements from a class_declaration."""
+        heritage = find_child(node, _CLASS_HERITAGE)
+        if heritage is None:
+            return None
+
+        extends: list[str] = []
+        implements: list[str] = []
+
+        extends_clause = find_child(heritage, _EXTENDS_CLAUSE)
+        if extends_clause is not None:
+            extends.extend(
+                get_node_text(n)
+                for n in collect_nodes_of_type(extends_clause, _IDENTIFIER)
+            )
+            extends.extend(
+                get_node_text(t)
+                for t in collect_nodes_of_type(extends_clause, "type_identifier")
+            )
+
+        implements_clause = find_child(heritage, _IMPLEMENTS_CLAUSE)
+        if implements_clause is not None:
+            implements.extend(
+                get_node_text(n)
+                for n in collect_nodes_of_type(implements_clause, _IDENTIFIER)
+            )
+            implements.extend(
+                get_node_text(t)
+                for t in collect_nodes_of_type(implements_clause, "type_identifier")
+            )
+
+        if extends or implements:
+            return InheritanceInfo(extends=extends, implements=implements)
+        return None
+
+    def _extract_interface(self, node: Node) -> InterfaceInfo:
+        """Extract interface info from an interface_declaration node."""
+        name_node = find_child(node, _IDENTIFIER)
+        if name_node is None:
+            name_node = find_child(node, "type_identifier")
+        name = get_node_text(name_node) if name_node else "<anonymous>"
+        line_range = (node.start_point[0] + 1, node.end_point[0] + 1)
+
+        iface_methods: list[MethodInfo] = []
+        properties: list[str] = []
+
+        body_node = find_child(node, "object_type") or find_child(
+            node, "interface_body"
+        )
+        if body_node is not None:
+            for child in body_node.children:
+                if child.type in (_METHOD_DEFINITION, "method_signature"):
+                    mn = find_child(child, _PROPERTY_IDENTIFIER)
+                    if mn:
+                        m_name = get_node_text(mn)
+                        m_params = self._extract_parameters(child)
+                        m_ret = self._extract_return_type(child)
+                        iface_methods.append(
+                            MethodInfo(
+                                name=m_name,
+                                line_range=(
+                                    child.start_point[0] + 1,
+                                    child.end_point[0] + 1,
+                                ),
+                                params=m_params,
+                                return_type=m_ret,
+                            )
+                        )
+                elif child.type in (
+                    _PUBLIC_FIELD_DEFINITION,
+                    "property_signature",
+                ):
+                    prop_name = find_child(child, _PROPERTY_IDENTIFIER)
+                    if prop_name:
+                        properties.append(get_node_text(prop_name))
+
+        # Interface extends clauses
+        extends: list[str] = []
+        extends_clause = find_child(node, _EXTENDS_CLAUSE)
+        if extends_clause is not None:
+            extends.extend(
+                get_node_text(n)
+                for n in collect_nodes_of_type(extends_clause, _IDENTIFIER)
+            )
+            extends.extend(
+                get_node_text(t)
+                for t in collect_nodes_of_type(extends_clause, "type_identifier")
+            )
+
+        return InterfaceInfo(
+            name=name,
+            line_range=line_range,
+            methods=iface_methods,
+            properties=properties,
+            extends=extends,
+        )
+
+    def _extract_enum(self, node: Node) -> EnumInfo:
+        """Extract enum info from an enum_declaration node."""
+        name_node = find_child(node, _IDENTIFIER)
+        if name_node is None:
+            name_node = find_child(node, "type_identifier")
+        name = get_node_text(name_node) if name_node else "<anonymous>"
+        line_range = (node.start_point[0] + 1, node.end_point[0] + 1)
+
+        values: list[str] = []
+        body_node = find_child(node, "enum_body")
+        if body_node is not None:
+            for child in body_node.children:
+                if child.type in (_PROPERTY_IDENTIFIER, "enum_member"):
+                    member_name = find_child(child, _PROPERTY_IDENTIFIER)
+                    if member_name:
+                        values.append(get_node_text(member_name))
+                    else:
+                        ident = find_child(child, _IDENTIFIER)
+                        if ident:
+                            values.append(get_node_text(ident))
+
+        return EnumInfo(
+            name=name,
+            line_range=line_range,
+            values=values,
+        )
+
+    def _extract_type_alias(self, node: Node) -> TypeAliasInfo:
+        """Extract type alias info from a type_alias_declaration node."""
+        name_node = find_child(node, _IDENTIFIER)
+        if name_node is None:
+            name_node = find_child(node, "type_identifier")
+        name = get_node_text(name_node) if name_node else "<anonymous>"
+        line_range = (node.start_point[0] + 1, node.end_point[0] + 1)
+
+        target_type = ""
+        type_node = find_child(node, "type_annotation")
+        if type_node is not None:
+            target_type = get_node_text(type_node)
+        else:
+            # Get the type parameter (the right-hand side of `type X = ...`)
+            for child in reversed(node.children):
+                if child.is_named and child.type != _IDENTIFIER:
+                    target_type = get_node_text(child)
+                    break
+
+        return TypeAliasInfo(
+            name=name,
+            line_range=line_range,
+            target_type=target_type,
+        )
+
+    def _extract_lexical_variables(
+        self, node: Node, analysis: StructuralAnalysis
+    ) -> None:
+        """Extract top-level const/let/var declarations as VariableInfo.
+
+        Skips declarations that are arrow functions (handled by
+        _extract_lexical_functions) and declarations that are exports
+        (handled by _extract_lexical_exports).
+        """
+        parent = node.parent
+        if parent is not None and parent.type == _EXPORT_STATEMENT:
+            return  # already handled as export
+
+        for decl in find_children(node, "variable_declarator"):
+            name_node = find_child(decl, _IDENTIFIER)
+            if name_node is None:
+                continue
+
+            # Skip arrow functions
+            if find_child(decl, _ARROW_FUNCTION) is not None:
+                continue
+
+            name = get_node_text(name_node)
+            if name.startswith("_"):
+                continue
+
+            type_annot = ""
+            type_node = find_child(decl, _TYPE_ANNOTATION)
+            if type_node is not None:
+                type_annot = get_node_text(type_node).removeprefix(": ").strip()
+
+            is_const = (
+                find_child(node, "const") is not None
+                if hasattr(node, "text")
+                else False
+            )
+
+            analysis.variables.append(
+                VariableInfo(
+                    name=name,
+                    line_range=(
+                        decl.start_point[0] + 1,
+                        decl.end_point[0] + 1,
+                    ),
+                    type_annotation=type_annot or None,
+                    is_const=is_const,
+                )
+            )
 
     # ------------------------------------------------------------------
     # Import extraction

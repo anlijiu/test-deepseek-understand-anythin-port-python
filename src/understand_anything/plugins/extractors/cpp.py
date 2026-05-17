@@ -34,9 +34,12 @@ from understand_anything.plugins.extractors.types import LanguageExtractor
 from understand_anything.types import (
     CallGraphEntry,
     ClassInfo,
+    EnumInfo,
     ExportInfo,
     FunctionInfo,
     ImportInfo,
+    InheritanceInfo,
+    MethodInfo,
     StructuralAnalysis,
 )
 
@@ -75,6 +78,11 @@ _STRING_CONTENT = "string_content"
 _POINTER_DECLARATOR = "pointer_declarator"
 _REFERENCE_DECLARATOR = "reference_declarator"
 _ARRAY_DECLARATOR = "array_declarator"
+_ENUM_SPECIFIER = "enum_specifier"
+_BASE_CLASS_CLAUSE = "base_class_clause"
+_TYPE_IDENTIFIER = "type_identifier"
+_ENUMERATOR_LIST = "enumerator_list"
+_ENUMERATOR = "enumerator"
 
 
 # ---------------------------------------------------------------------------
@@ -196,27 +204,31 @@ class CppExtractor(LanguageExtractor):
         classes: list[ClassInfo] = []
         imports: list[ImportInfo] = []
         exports: list[ExportInfo] = []
+        enums: list[EnumInfo] = []
 
         # Track methods associated with classes via out-of-class definitions
-        methods_by_class: dict[str, list[str]] = {}
+        methods_by_class: dict[str, list[MethodInfo]] = {}
 
         self._walk_top_level(
-            root_node, functions, classes, imports, exports, methods_by_class
+            root_node, functions, classes, imports, exports,
+            methods_by_class, enums,
         )
 
         # Attach out-of-class methods to their corresponding classes
         for cls in classes:
-            methods = methods_by_class.get(cls.name)
-            if methods:
-                for m in methods:
-                    if m not in cls.methods:
-                        cls.methods.append(m)
+            ext_methods = methods_by_class.get(cls.name)
+            if ext_methods:
+                for m in ext_methods:
+                    if m.name not in cls.methods:
+                        cls.methods.append(m.name)
+                        cls.method_details.append(m)
 
         return StructuralAnalysis(
             functions=functions,
             classes=classes,
             imports=imports,
             exports=exports,
+            enums=enums,
         )
 
     # ------------------------------------------------------------------
@@ -224,20 +236,32 @@ class CppExtractor(LanguageExtractor):
     # ------------------------------------------------------------------
 
     def extract_call_graph(self, root_node: Node) -> list[CallGraphEntry]:
+        """从 AST 中提取调用图（迭代遍历，避免深层嵌套栈溢出）."""
         entries: list[CallGraphEntry] = []
         function_stack: list[str] = []
 
-        def _walk_for_calls(node: Node) -> None:
-            pushed_name = False
+        # 显式栈：Node 表示待处理的节点，str 表示弹出 function_stack 的哨兵
+        stack: list[Node | str] = [root_node]
 
-            # Track entering function_definition
+        while stack:
+            item = stack.pop()
+
+            if isinstance(item, str):
+                # 哨兵：离开函数作用域
+                function_stack.pop()
+                continue
+
+            node = item
+            pushed = False
+
+            # 进入函数定义
             if node.type == _FUNCTION_DEFINITION:
                 name = self._extract_function_name(node)
                 if name:
                     function_stack.append(name)
-                    pushed_name = True
+                    pushed = True
 
-            # Extract call_expression nodes
+            # 提取调用表达式
             if node.type == _CALL_EXPRESSION and function_stack:
                 callee = self._extract_callee_name(node)
                 if callee:
@@ -249,13 +273,13 @@ class CppExtractor(LanguageExtractor):
                         )
                     )
 
-            for child in node.children:
-                _walk_for_calls(child)
+            # 先压入哨兵（在此节点的所有子节点处理完后弹出 function_stack）
+            if pushed:
+                stack.append("__FUNC_END__")
 
-            if pushed_name:
-                function_stack.pop()
+            # 子节点逆序入栈
+            stack.extend(reversed(node.children))
 
-        _walk_for_calls(root_node)
         return entries
 
     # ------------------------------------------------------------------
@@ -269,7 +293,8 @@ class CppExtractor(LanguageExtractor):
         classes: list[ClassInfo],
         imports: list[ImportInfo],
         exports: list[ExportInfo],
-        methods_by_class: dict[str, list[str]],
+        methods_by_class: dict[str, list[MethodInfo]],
+        enums: list[EnumInfo],
     ) -> None:
         """Walk top-level declarations, recursing into namespaces."""
         for node in parent_node.children:
@@ -288,6 +313,9 @@ class CppExtractor(LanguageExtractor):
                     node, "struct", classes, functions, exports
                 )
 
+            elif node_type == _ENUM_SPECIFIER:
+                self._extract_enum_def(node, enums, exports)
+
             elif node_type == _FUNCTION_DEFINITION:
                 self._extract_function_def(
                     node, functions, exports, methods_by_class
@@ -297,7 +325,8 @@ class CppExtractor(LanguageExtractor):
                 body = find_child(node, _DECLARATION_LIST)
                 if body:
                     self._walk_top_level(
-                        body, functions, classes, imports, exports, methods_by_class
+                        body, functions, classes, imports, exports,
+                        methods_by_class, enums,
                     )
 
             elif node_type == _DECLARATION:
@@ -313,6 +342,9 @@ class CppExtractor(LanguageExtractor):
                     self._extract_class_or_struct(
                         inner_struct, "struct", classes, functions, exports
                     )
+                inner_enum = find_child(node, _ENUM_SPECIFIER)
+                if inner_enum:
+                    self._extract_enum_def(inner_enum, enums, exports)
 
     # ------------------------------------------------------------------
     # Internal: include extraction
@@ -366,7 +398,7 @@ class CppExtractor(LanguageExtractor):
             return
 
         class_name = get_node_text(name_node)
-        methods: list[str] = []
+        method_details: list[MethodInfo] = []
         properties: list[str] = []
 
         body = node.child_by_field_name("body")
@@ -387,7 +419,20 @@ class CppExtractor(LanguageExtractor):
                         # Method declaration (no body)
                         info = _extract_func_decl_name(decl_node)
                         if info:
-                            methods.append(info[0])
+                            params_node = decl_node.child_by_field_name(
+                                "parameters"
+                            )
+                            method_details.append(
+                                MethodInfo(
+                                    name=info[0],
+                                    line_range=(
+                                        member.start_point[0] + 1,
+                                        member.end_point[0] + 1,
+                                    ),
+                                    params=_extract_params(params_node),
+                                    visibility=current_access,
+                                )
+                            )
                             if current_access == "public":
                                 exports.append(
                                     ExportInfo(
@@ -407,9 +452,22 @@ class CppExtractor(LanguageExtractor):
                     if func_decl and func_decl.type == _FUNCTION_DECLARATOR:
                         info = _extract_func_decl_name(func_decl)
                         if info:
-                            methods.append(info[0])
+                            params_node = func_decl.child_by_field_name(
+                                "parameters"
+                            )
+                            method_details.append(
+                                MethodInfo(
+                                    name=info[0],
+                                    line_range=(
+                                        member.start_point[0] + 1,
+                                        member.end_point[0] + 1,
+                                    ),
+                                    params=_extract_params(params_node),
+                                    return_type=_extract_return_type(member),
+                                    visibility=current_access,
+                                )
+                            )
 
-                            params_node = func_decl.child_by_field_name("parameters")
                             functions.append(
                                 FunctionInfo(
                                     name=info[0],
@@ -430,6 +488,9 @@ class CppExtractor(LanguageExtractor):
                                     )
                                 )
 
+        # Detect inheritance from base_class_clause
+        inheritance = self._extract_cpp_inheritance(node)
+
         classes.append(
             ClassInfo(
                 name=class_name,
@@ -437,8 +498,10 @@ class CppExtractor(LanguageExtractor):
                     node.start_point[0] + 1,
                     node.end_point[0] + 1,
                 ),
-                methods=methods,
+                methods=[m.name for m in method_details],
                 properties=properties,
+                inheritance=inheritance,
+                method_details=method_details,
             )
         )
 
@@ -446,6 +509,64 @@ class CppExtractor(LanguageExtractor):
         exports.append(
             ExportInfo(
                 name=class_name,
+                line_number=node.start_point[0] + 1,
+            )
+        )
+
+    @staticmethod
+    def _extract_cpp_inheritance(node: Node) -> InheritanceInfo | None:
+        """Extract inheritance info from a class/struct specifier."""
+        base_clause = find_child(node, _BASE_CLASS_CLAUSE)
+        if base_clause is None:
+            return None
+
+        extends: list[str] = [
+            get_node_text(child)
+            for child in base_clause.children
+            if child.type in (_TYPE_IDENTIFIER, "qualified_identifier")
+        ]
+        implements: list[str] = []
+
+        if extends or implements:
+            return InheritanceInfo(extends=extends, implements=implements)
+        return None
+
+    @staticmethod
+    def _extract_enum_def(
+        node: Node,
+        enums: list[EnumInfo],
+        exports: list[ExportInfo],
+    ) -> None:
+        """Extract an enum_specifier into the enums list."""
+        name_node = node.child_by_field_name("name")
+        if name_node is None:
+            return
+
+        enum_name = get_node_text(name_node)
+        values: list[str] = []
+
+        body = node.child_by_field_name("body")
+        if body is not None:
+            enumerators = find_children(body, _ENUMERATOR)
+            for enumerator in enumerators:
+                enum_name_node = find_child(enumerator, _IDENTIFIER)
+                if enum_name_node:
+                    values.append(get_node_text(enum_name_node))
+
+        enums.append(
+            EnumInfo(
+                name=enum_name,
+                line_range=(
+                    node.start_point[0] + 1,
+                    node.end_point[0] + 1,
+                ),
+                values=values,
+            )
+        )
+
+        exports.append(
+            ExportInfo(
+                name=enum_name,
                 line_number=node.start_point[0] + 1,
             )
         )
@@ -459,7 +580,7 @@ class CppExtractor(LanguageExtractor):
         node: Node,
         functions: list[FunctionInfo],
         exports: list[ExportInfo],
-        methods_by_class: dict[str, list[str]],
+        methods_by_class: dict[str, list[MethodInfo]],
     ) -> None:
         """Extract a free function or out-of-class method definition."""
         func_decl = node.child_by_field_name("declarator")
@@ -488,7 +609,17 @@ class CppExtractor(LanguageExtractor):
         if qualifier:
             if qualifier not in methods_by_class:
                 methods_by_class[qualifier] = []
-            methods_by_class[qualifier].append(func_name)
+            methods_by_class[qualifier].append(
+                MethodInfo(
+                    name=func_name,
+                    line_range=(
+                        node.start_point[0] + 1,
+                        node.end_point[0] + 1,
+                    ),
+                    params=params,
+                    return_type=return_type,
+                )
+            )
 
         # Non-static top-level functions are exports
         if not _is_static(node):
